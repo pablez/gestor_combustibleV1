@@ -29,3 +29,14 @@ Route::middleware('auth')->group(function () {
     Volt::route('confirm-password', 'pages.auth.confirm-password')
         ->name('password.confirm');
 });
+
+
+Route::middleware(['auth', 'role:Administrador|Supervisor'])->prefix('admin')->group(function () {
+    Route::get('/usuarios', \App\Livewire\User\UserIndex::class)->name('admin.users.index');
+    Route::get('/usuarios/crear', \App\Livewire\User\UserCreate::class)->name('admin.users.create');
+    Route::get('/usuarios/{user}/editar', \App\Livewire\User\UserEdit::class)->name('admin.users.edit');
+
+    Route::get('/unidades', \App\Livewire\UnidadTransporte\UnidadTransporteIndex::class)->name('admin.units.index');
+    Route::get('/unidades/crear', \App\Livewire\UnidadTransporte\UnidadTransporteCreate::class)->name('admin.units.create');
+    Route::get('/unidades/{unitTransport}/editar', \App\Livewire\UnidadTransporte\UnidadTransporteEdit::class)->name('admin.units.edit');
+});

@@ -13,7 +13,16 @@ return new class extends Migration
     {
         Schema::create('gasto_extra_transportes', function (Blueprint $table) {
             $table->id();
-            $table->timestamps();
+            $table->foreignId('user_id')->constrained('users')->onDelete('cascade'); // usuario_id
+            $table->foreignId('unidad_transporte_id')->nullable()->constrained('unidad_transportes')->onDelete('set null'); // Optional
+            $table->date('fecha_gasto');
+            $table->string('tipo_gasto', 100);
+            $table->text('descripcion')->nullable();
+            $table->decimal('monto_bs', 10, 2);
+            $table->boolean('comprobante_adjunto')->default(false);
+            $table->enum('estado_aprobacion', ['Pendiente', 'Aprobado', 'Rechazado'])->default('Pendiente');
+            $table->foreignId('supervisor_id')->nullable()->constrained('users')->onDelete('set null'); // Optional
+            $table->timestamps(); // Coincide con fecha_creacion y fecha_actualizacion
         });
     }
 

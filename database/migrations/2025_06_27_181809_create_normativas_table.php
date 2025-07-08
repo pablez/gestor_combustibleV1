@@ -13,7 +13,15 @@ return new class extends Migration
     {
         Schema::create('normativas', function (Blueprint $table) {
             $table->id();
-            $table->timestamps();
+            $table->string('nombre_norma', 255);
+            $table->text('descripcion')->nullable();
+            $table->enum('tipo_norma', ['Combustible', 'Viaticos', 'Software Libre', 'Otros']);
+            $table->decimal('valor_limite', 10, 2)->nullable();
+            $table->string('unidad_limite', 50)->nullable();
+            $table->enum('periodo_limite', ['Diario', 'Semanal', 'Mensual', 'Por Mision', 'N/A'])->nullable();
+            $table->date('fecha_vigencia_inicio')->nullable();
+            $table->date('fecha_vigencia_fin')->nullable();
+            $table->timestamps(); // Aunque no estaba explícitamente, es buena práctica tenerlas
         });
     }
 

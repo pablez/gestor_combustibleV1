@@ -13,7 +13,13 @@ return new class extends Migration
     {
         Schema::create('registro_auditorias', function (Blueprint $table) {
             $table->id();
-            $table->timestamps();
+            $table->foreignId('user_id')->nullable()->constrained('users')->onDelete('set null'); // Puede que el usuario se elimine
+            $table->dateTime('fecha_hora');
+            $table->string('accion_realizada', 255);
+            $table->string('entidad_afectada', 100);
+            $table->unsignedBigInteger('id_registro_afectado'); // No FK, ya que podría ser de cualquier tabla
+            $table->text('detalles_cambio')->nullable();
+            $table->timestamps(); // Para created_at y updated_at si se necesita
         });
     }
 

@@ -9,7 +9,7 @@ use Illuminate\Validation\Rule;
 use function Livewire\Volt\state;
 
 state([
-    'name' => fn () => auth()->user()->name,
+    'nombre' => fn () => auth()->user()->nombre,
     'email' => fn () => auth()->user()->email
 ]);
 
@@ -17,7 +17,7 @@ $updateProfileInformation = function () {
     $user = Auth::user();
 
     $validated = $this->validate([
-        'name' => ['required', 'string', 'max:255'],
+        'nombre' => ['required', 'string', 'max:255'],
         'email' => ['required', 'string', 'lowercase', 'email', 'max:255', Rule::unique(User::class)->ignore($user->id)],
     ]);
 
@@ -29,7 +29,7 @@ $updateProfileInformation = function () {
 
     $user->save();
 
-    $this->dispatch('profile-updated', name: $user->name);
+    $this->dispatch('profile-updated', nombre: $user->nombre);
 };
 
 $sendVerification = function () {
@@ -51,19 +51,19 @@ $sendVerification = function () {
 <section>
     <header>
         <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">
-            {{ __('Profile Information') }}
+            {{ __('Informacion del Perfil') }}
         </h2>
 
         <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            {{ __("Update your account's profile information and email address.") }}
+            {{ __("Actualizar su informacion del perfil y email.") }}
         </p>
     </header>
 
     <form wire:submit="updateProfileInformation" class="mt-6 space-y-6">
         <div>
-            <x-input-label for="name" :value="__('Name')" />
-            <x-text-input wire:model="name" id="name" name="name" type="text" class="mt-1 block w-full" required autofocus autocomplete="name" />
-            <x-input-error class="mt-2" :messages="$errors->get('name')" />
+            <x-input-label for="nombre" :value="__('Nombre')" />
+            <x-text-input wire:model="nombre" id="nombre" name="nombre" type="text" class="mt-1 block w-full" required autofocus autocomplete="name" />
+            <x-input-error class="mt-2" :messages="$errors->get('nombre')" />
         </div>
 
         <div>
@@ -91,10 +91,10 @@ $sendVerification = function () {
         </div>
 
         <div class="flex items-center gap-4">
-            <x-primary-button>{{ __('Save') }}</x-primary-button>
+            <x-primary-button>{{ __('Guardar') }}</x-primary-button>
 
             <x-action-message class="me-3" on="profile-updated">
-                {{ __('Saved.') }}
+                {{ __('Guardado.') }}
             </x-action-message>
         </div>
     </form>

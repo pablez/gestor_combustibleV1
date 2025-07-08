@@ -13,7 +13,13 @@ return new class extends Migration
     {
         Schema::create('liquidacion_viaticos', function (Blueprint $table) {
             $table->id();
-            $table->timestamps();
+            $table->foreignId('solicitud_viatico_id')->unique()->constrained('solicitud_viaticos')->onDelete('cascade');
+            $table->dateTime('fecha_liquidacion');
+            $table->decimal('monto_liquidado_bs', 10, 2);
+            $table->decimal('monto_devuelto_bs', 10, 2)->nullable();
+            $table->decimal('monto_a_reembolsar_bs', 10, 2)->nullable();
+            $table->boolean('comprobantes_adjuntos')->default(false);
+            $table->timestamps(); // Coincide con fecha_creacion y fecha_actualizacion
         });
     }
 

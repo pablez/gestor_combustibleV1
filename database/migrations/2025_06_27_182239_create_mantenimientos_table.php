@@ -13,7 +13,15 @@ return new class extends Migration
     {
         Schema::create('mantenimientos', function (Blueprint $table) {
             $table->id();
-            $table->timestamps();
+            $table->foreignId('unidad_transporte_id')->constrained('unidad_transportes')->onDelete('cascade');
+            $table->date('fecha_mantenimiento');
+            $table->enum('tipo_mantenimiento', ['Preventivo', 'Correctivo']);
+            $table->text('descripcion_trabajo')->nullable();
+            $table->decimal('costo_bs', 10, 2)->nullable();
+            $table->decimal('kilometraje_mantenimiento', 10, 2)->nullable();
+            $table->foreignId('proveedor_id')->nullable()->constrained('proveedors')->onDelete('set null'); // Optional
+            $table->date('fecha_proximo_mantenimiento')->nullable(); // Optional
+            $table->timestamps(); // Coincide con fecha_creacion y fecha_actualizacion
         });
     }
 
