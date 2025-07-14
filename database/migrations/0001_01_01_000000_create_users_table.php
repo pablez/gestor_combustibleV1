@@ -19,7 +19,7 @@ return new class extends Migration
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             // 'rol' será manejado por Spatie, no se agrega aquí directamente como columna
-            $table->enum('estado', ['Activo', 'Inactivo'])->default('Activo'); // Nuevo campo 'estado'
+            $table->enum('estado', ['Activo','Pendiente','Inactivo'])->default('Activo'); // Nuevo campo 'estado'
             $table->rememberToken();
             $table->timestamps(); // Esto ya cubre fecha_creacion y fecha_actualizacion
         });

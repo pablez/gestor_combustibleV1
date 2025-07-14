@@ -22,6 +22,7 @@ class RoleAndPermissionsSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'ver usuarios']);
         Permission::firstOrCreate(['name' => 'editar usuarios']);
         Permission::firstOrCreate(['name' => 'eliminar usuarios']);
+        Permission::firstOrCreate(['name' => 'aprobar usuarios']);
 
         // Permisos de Roles
         Permission::firstOrCreate(['name' => 'ver roles']);

@@ -32,11 +32,18 @@ $register = function () {
 
     $validated['password'] = Hash::make($validated['password']);
 
+    // 1. Se crea con estado 'Inactivo' y sin rol (el rol no se asigna aquí)
+    $validated['estado'] = 'Pendiente';
+
     event(new Registered($user = User::create($validated)));
 
-    Auth::login($user);
+    // 2. No se inicia sesión automáticamente (línea eliminada)
 
-    $this->redirect(route('dashboard', absolute: false), navigate: true);
+    // 3. Se añade un mensaje de éxito para informar al usuario
+    session()->flash('status', '¡Registro exitoso! Su cuenta está pendiente de activación por un administrador.');
+
+    // 4. Se redirecciona a la página de login
+    $this->redirect(route('login', absolute: false), navigate: true);
 };
 
 ?>

@@ -2,42 +2,85 @@
 
 namespace App\Livewire\User;
 
-use App\Models\User; // Importa el modelo User
+use App\Models\User;
 use Livewire\Component;
-use Illuminate\Support\Facades\Auth; // Para obtener el usuario autenticado
-use Spatie\Permission\Models\Role; // Importa el modelo Role de Spatie Permission
-use Illuminate\Validation\Rule; // Para reglas de validación
-use Illuminate\Validation\ValidationException; // Para manejar excepciones de validación
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests; // Trait para autorizar acciones
+use Livewire\WithFileUploads;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
+use Illuminate\Validation\Rule;
+use Spatie\Permission\Models\Role;
 
 class UserCreate extends Component
 {
-    use AuthorizesRequests; // Usamos el trait AuthorizesRequests
+    use WithFileUploads;
 
-    public $nombre = '';
-    public $apellido = '';
-    public $email = '';
-    public $password = '';
-    public $password_confirmation = '';
-    public $selectedRole = null; // Almacena el ID del rol seleccionado
-    public $supervisor_id = null; // Almacena el ID del supervisor seleccionado
-    public $supervisors = []; // Almacena la lista de supervisores
-    public $conductorRoleId = null; // Almacena el ID del rol Conductor/Operador
-    public $estado = 'Activo'; // Valor por defecto para el estado
+    // Propiedades del formulario
+    public $nombre;
+    public $apellido;
+    public $email;
+    public $password;
+    public $password_confirmation;
+    public $estado = 'Activo';
+    public $selectedRole;
+    public $supervisor_id;
+    public $foto_perfil; // Nueva propiedad para la foto
+
+    // Propiedades auxiliares
+    public $roles;
+    public $supervisors;
+    public $conductorRoleId;
+
+    /**
+     * Inicializa el componente con los datos necesarios
+     */
+    public function mount()
+    {
+        // Cargar todos los roles disponibles
+        $this->roles = Role::all();
+        
+        // Inicializar supervisors como colección vacía
+        $this->supervisors = collect();
+        
+        // Obtener el ID del rol Conductor/Operador
+        $conductorRole = Role::where('name', 'Conductor/Operador')->first();
+        $this->conductorRoleId = $conductorRole ? $conductorRole->id : null;
+        
+        // Cargar supervisores disponibles si el usuario es administrador
+        if (Auth::user()->hasRole('Administrador')) {
+            $this->supervisors = User::whereHas('roles', function ($query) {
+                $query->where('name', 'Supervisor');
+            })->get();
+        }
+    }
 
     // Reglas de validación para el formulario
     protected function rules()
     {
-        return [
+        $rules = [
             'nombre' => ['required', 'string', 'max:255'],
             'apellido' => ['nullable', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
-            'estado' => ['required', Rule::in(['Activo', 'Inactivo'])],
-            'selectedRole' => ['required', 'integer', 'exists:roles,id'], // Valida un solo rol
-            // El supervisor_id es opcional, pero si se proporciona, debe ser un supervisor válido
+            'selectedRole' => ['required', 'integer', 'exists:roles,id'],
             'supervisor_id' => ['nullable', 'integer', 'exists:users,id'],
+            'foto_perfil' => ['nullable', 'image', 'max:2048'], // Máximo 2MB
         ];
+
+        // Solo validar estado si el usuario es Administrador
+        if (Auth::user()->hasRole('Administrador')) {
+            $rules['estado'] = ['required', Rule::in(['Activo', 'Inactivo'])];
+        }
+
+        return $rules;
+    }
+
+    // Hook para previsualizar la foto
+    public function updatedFotoPerfil()
+    {
+        $this->validate([
+            'foto_perfil' => 'image|max:2048',
+        ]);
     }
 
     // Hook que se ejecuta cuando la propiedad $selectedRole cambia.
@@ -47,26 +90,6 @@ class UserCreate extends Component
         // asegurarse de que no se asigne ningún supervisor.
         if ($value != $this->conductorRoleId) {
             $this->supervisor_id = null;
-        }
-    }
-
-    // Método que se ejecuta al montar el componente
-    public function mount()
-    {
-        // Autorizar la acción de crear usuarios al cargar el componente
-        $this->authorize('crear usuarios');
-
-        /** @var \App\Models\User $authenticatedUser */
-        $authenticatedUser = Auth::user();
-
-        // Obtener y almacenar el ID del rol 'Conductor/Operador' para usarlo en la vista y en los hooks
-        $this->conductorRoleId = Role::where('name', 'Conductor/Operador')->first()?->id;
-
-        // Si el usuario es Administrador, cargar la lista de supervisores
-        if ($authenticatedUser->hasRole('Administrador')) {
-            $this->supervisors = User::whereHas('roles', function ($query) {
-                $query->where('name', 'Supervisor');
-            })->get();
         }
     }
 
@@ -82,18 +105,15 @@ class UserCreate extends Component
         // Validación específica para el Supervisor
         if ($authenticatedUser->hasRole('Supervisor')) {
             $conductorRole = Role::where('name', 'Conductor/Operador')->first();
-            // Si el rol de conductor no existe, o si el rol seleccionado no es el de Conductor/Operador
             if (!$conductorRole || $this->selectedRole != $conductorRole->id) {
-                // Lanzar un error de validación personalizado
                 throw ValidationException::withMessages([
                     'selectedRole' => 'Como Supervisor, solo puedes crear usuarios con el rol Conductor/Operador.',
                 ]);
             }
-            // Asignar automáticamente el supervisor_id al ID del supervisor autenticado
             $this->supervisor_id = $authenticatedUser->id;
         }
 
-        $this->validate(); // Valida los datos del formulario
+        $this->validate();
 
         // Validación adicional para el supervisor_id
         if ($this->supervisor_id) {
@@ -105,46 +125,49 @@ class UserCreate extends Component
             }
         }
 
-        // Crear el nuevo usuario
-        $newUser = User::create([
+        // Preparar los datos del usuario
+        $userData = [
             'nombre' => $this->nombre,
             'apellido' => $this->apellido,
             'email' => $this->email,
-            'password' => bcrypt($this->password), // Cifrar la contraseña
-            'estado' => $this->estado,
-            'supervisor_id' => $this->supervisor_id, // Asignar el supervisor
-        ]);
+            'password' => bcrypt($this->password),
+            'supervisor_id' => $this->supervisor_id,
+        ];
 
-        // Asignar el rol seleccionado al nuevo usuario
+        // Procesar la foto de perfil
+        if ($this->foto_perfil) {
+            $fotoPath = $this->foto_perfil->store('fotos-perfil', 'public');
+            $userData['foto_perfil'] = $fotoPath;
+        }
+
+        // Asignar estado basado en el rol del creador
+        if ($authenticatedUser->hasRole('Administrador')) {
+            $userData['estado'] = $this->estado;
+        } else {
+            $userData['estado'] = 'Pendiente';
+        }
+
+        // Crear el nuevo usuario
+        $newUser = User::create($userData);
+
+        // Asignar el rol seleccionado
         $role = Role::find($this->selectedRole);
         if ($role) {
             $newUser->assignRole($role);
         }
 
-        // Redirigir de vuelta a la lista de usuarios con un mensaje de éxito
-        session()->flash('message', 'Usuario creado correctamente y rol asignado.');
+        // Mensaje de éxito personalizado según el creador
+        if ($authenticatedUser->hasRole('Administrador')) {
+            session()->flash('message', 'Usuario creado correctamente con estado: ' . $this->estado);
+        } else {
+            session()->flash('message', 'Usuario creado correctamente. Está pendiente de aprobación por un administrador.');
+        }
+
         return redirect()->route('admin.users.index');
     }
 
     public function render()
     {
-        // Autorizar la acción de ver roles al renderizar la vista (para mostrar el selector de roles)
-        $this->authorize('ver roles');
-
-        /** @var \App\Models\User $user */
-        $user = Auth::user();
-        $roles = collect(); // Inicializamos como una colección vacía
-
-        if ($user->hasRole('Administrador')) {
-            // El administrador puede ver y asignar todos los roles
-            $roles = Role::all();
-        } elseif ($user->hasRole('Supervisor')) {
-            // El supervisor solo puede ver y asignar el rol "Conductor/Operador"
-            $roles = Role::where('name', 'Conductor/Operador')->get();
-        }
-
-        return view('livewire.user.user-create', [
-            'roles' => $roles,
-        ]);
+        return view('livewire.user.user-create');
     }
 }

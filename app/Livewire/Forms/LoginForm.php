@@ -38,6 +38,17 @@ class LoginForm extends Form
             ]);
         }
 
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
+
+        if ($user->estado !== 'Activo') {
+            Auth::logout(); // Cierra la sesión del usuario inactivo
+
+            throw ValidationException::withMessages([
+                'form.email' => 'Esta cuenta de usuario está inactiva o pendiente. Contacte al administrador.',
+            ]);
+        }
+
         RateLimiter::clear($this->throttleKey());
     }
 
