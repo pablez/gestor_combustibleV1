@@ -16,7 +16,7 @@
                     </p>
 
                     <!-- Panel de Gestión para Administradores y Supervisores -->
-                    @if(auth()->user()->hasAnyRole(['Administrador','Supervisor']))
+                    @if(auth()->user()->hasAnyRole(['Admin General','Admin','Supervisor']))
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                             {{-- Tarjeta para Gestión de Usuarios --}}
                             <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">

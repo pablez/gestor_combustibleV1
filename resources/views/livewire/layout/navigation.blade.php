@@ -60,9 +60,20 @@ $logout = function (Logout $logout) {
                     </x-nav-link>
                     @endcan
 
-                    @if(auth()->user()->hasRole('Administrador'))
+                    @if(auth()->user()->hasRole('Admin General|Admin'))
                         @php
-                            $pendingCount = \App\Models\User::where('estado', 'Pendiente')->count();
+                            $currentUser = auth()->user();
+                            
+                            // Filtrar usuarios pendientes según el rol
+                            if ($currentUser->hasRole('Admin General')) {
+                                // Admin General ve todos los usuarios pendientes
+                                $pendingCount = \App\Models\User::where('estado', 'Pendiente')->count();
+                            } else {
+                                // Admin solo ve usuarios pendientes de su unidad organizacional
+                                $pendingCount = \App\Models\User::where('estado', 'Pendiente')
+                                    ->where('unidad_organizacional_id', $currentUser->unidad_organizacional_id)
+                                    ->count();
+                            }
                         @endphp
                         <x-nav-link :href="route('admin.approvals')" :active="request()->routeIs('admin.approvals')" wire:navigate>
                             <div class="flex items-center space-x-2">
@@ -96,6 +107,12 @@ $logout = function (Logout $logout) {
                                 <div class="text-xs text-indigo-600 dark:text-indigo-400 font-medium">
                                     {{ auth()->user()->getRoleNames()->first() ?? 'Sin rol' }}
                                 </div>
+                                {{-- Agregar unidad organizacional --}}
+                                @if(auth()->user()->unidadOrganizacional)
+                                    <div class="text-xs text-gray-500 dark:text-gray-400 truncate max-w-32">
+                                        {{ auth()->user()->unidadOrganizacional->siglas }}
+                                    </div>
+                                @endif
                             </div>
                             {{-- Flecha del dropdown --}}
                             <div class="ms-2">
@@ -124,6 +141,19 @@ $logout = function (Logout $logout) {
                                     <div class="inline-flex items-center px-2 py-1 text-xs font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-900 rounded-full">
                                         {{ auth()->user()->getRoleNames()->first() ?? 'Sin rol' }}
                                     </div>
+                                    {{-- Agregar unidad organizacional en el dropdown --}}
+                                    @if(auth()->user()->unidadOrganizacional)
+                                        <div class="mt-2 inline-flex items-center px-2 py-1 text-xs font-medium text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-900 rounded-full">
+                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                                            </svg>
+                                            {{ auth()->user()->unidadOrganizacional->siglas }} - {{ auth()->user()->unidadOrganizacional->nombre_unidad }}
+                                        </div>
+                                    @else
+                                        <div class="mt-2 inline-flex items-center px-2 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-900 rounded-full">
+                                            Sin unidad asignada
+                                        </div>
+                                    @endif
                                 </div>
                             </div>
                         </div>
@@ -200,9 +230,18 @@ $logout = function (Logout $logout) {
             </x-responsive-nav-link>
             @endcan
 
-            @if(auth()->user()->hasRole('Administrador'))
+            @if(auth()->user()->hasRole('Admin General|Admin'))
                 @php
-                    $pendingCount = \App\Models\User::where('estado', 'Pendiente')->count();
+                    $currentUser = auth()->user();
+                    
+                    // Filtrar usuarios pendientes según el rol (mismo código que arriba)
+                    if ($currentUser->hasRole('Admin General')) {
+                        $pendingCount = \App\Models\User::where('estado', 'Pendiente')->count();
+                    } else {
+                        $pendingCount = \App\Models\User::where('estado', 'Pendiente')
+                            ->where('unidad_organizacional_id', $currentUser->unidad_organizacional_id)
+                            ->count();
+                    }
                 @endphp
                 <x-responsive-nav-link :href="route('admin.approvals')" :active="request()->routeIs('admin.approvals')" wire:navigate>
                     <div class="flex items-center justify-between">
@@ -239,6 +278,19 @@ $logout = function (Logout $logout) {
                         <div class="inline-flex items-center px-2 py-1 text-xs font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-900 rounded-full">
                             {{ auth()->user()->getRoleNames()->first() ?? 'Sin rol' }}
                         </div>
+                        {{-- Agregar unidad organizacional en móvil --}}
+                        @if(auth()->user()->unidadOrganizacional)
+                            <div class="mt-2 inline-flex items-center px-2 py-1 text-xs font-medium text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-900 rounded-full">
+                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                                </svg>
+                                {{ auth()->user()->unidadOrganizacional->siglas }}
+                            </div>
+                        @else
+                            <div class="mt-2 inline-flex items-center px-2 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-900 rounded-full">
+                                Sin unidad asignada
+                            </div>
+                        @endif
                     </div>
                 </div>
             </div>

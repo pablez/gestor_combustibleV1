@@ -143,7 +143,7 @@
                                     </div>
 
                                     {{-- Estado --}}
-                                    @if(auth()->user()->hasRole('Administrador|Supervisor'))
+                                    @if(auth()->user()->hasRole('Administrador General|Administrador|Supervisor'))
                                         <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-6">
                                             <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Estado del Usuario</h3>
                                             
@@ -191,17 +191,123 @@
                                             @error('selectedRole') <span class="text-red-500 dark:text-red-400 text-xs">{{ $message }}</span> @enderror
                                         </div>
 
-                                        {{-- Campo para asignar supervisor --}}
-                                        @if(auth()->user()->hasRole('Administrador') && $selectedRole == $conductorRoleId)
+                                        {{-- Selector de Unidad Organizacional (aparece después de seleccionar rol) --}}
+                                        @if($showUnidadSelector)
                                             <div class="mt-4 p-4 bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 rounded-lg">
-                                                <label for="supervisor_id" class="block text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">Asignar Supervisor</label>
-                                                <select id="supervisor_id" wire:model="supervisor_id" class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-300 dark:focus:border-indigo-500 focus:ring focus:ring-indigo-200 dark:focus:ring-indigo-600 focus:ring-opacity-50">
-                                                    <option value="">Sin supervisor</option>
-                                                    @foreach($supervisors as $supervisor)
-                                                        <option value="{{ $supervisor->id }}">{{ $supervisor->nombre }} {{ $supervisor->apellido }}</option>
+                                                <h4 class="text-lg font-semibold text-blue-900 dark:text-blue-100 mb-3">Unidad Organizacional</h4>
+                                                <label for="unidad_organizacional_id" class="block text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">Seleccionar Unidad Organizacional *</label>
+                                                <select id="unidad_organizacional_id" wire:model.live="unidad_organizacional_id" class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-300 dark:focus:border-indigo-500 focus:ring focus:ring-indigo-200 dark:focus:ring-indigo-600 focus:ring-opacity-50">
+                                                    <option value="">Selecciona una unidad organizacional</option>
+                                                    @foreach($unidadesOrganizacionales as $unidad)
+                                                        <option value="{{ $unidad->id_unidad_organizacional }}">
+                                                            {{ $unidad->siglas }} - {{ $unidad->nombre_unidad }} ({{ $unidad->tipo_unidad }})
+                                                        </option>
                                                     @endforeach
                                                 </select>
+                                                @error('unidad_organizacional_id') <span class="text-red-500 dark:text-red-400 text-xs">{{ $message }}</span> @enderror
+                                            </div>
+                                        @endif
+
+                                        {{-- Información para Admin General creando Admin --}}
+                                        @if($selectedRole == $adminRoleId && auth()->user()->hasRole('Admin General') && $unidad_organizacional_id)
+                                            <div class="mt-4 p-4 bg-purple-50 dark:bg-purple-900 border border-purple-200 dark:border-purple-700 rounded-lg">
+                                                <div class="flex items-center">
+                                                    <svg class="w-5 h-5 text-purple-600 dark:text-purple-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                    </svg>
+                                                    <div>
+                                                        <p class="text-sm font-medium text-purple-800 dark:text-purple-200">Asignación Automática:</p>
+                                                        <p class="text-sm text-purple-700 dark:text-purple-300">El usuario Admin será asignado bajo tu supervisión automáticamente en la unidad organizacional seleccionada.</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        @endif
+
+                                        {{-- Selector de Admin para Supervisor --}}
+                                        @if($showAdminSelector)
+                                            <div class="mt-4 p-4 bg-green-50 dark:bg-green-900 border border-green-200 dark:border-green-700 rounded-lg">
+                                                <h4 class="text-lg font-semibold text-green-900 dark:text-green-100 mb-3">Asignación de Supervisor</h4>
+                                                <label for="admin_id" class="block text-sm font-medium text-green-800 dark:text-green-200 mb-2">Seleccionar Admin de la Unidad *</label>
+                                                <select id="admin_id" wire:model="admin_id" class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-300 dark:focus:border-indigo-500 focus:ring focus:ring-indigo-200 dark:focus:ring-indigo-600 focus:ring-opacity-50">
+                                                    <option value="">Selecciona un Admin</option>
+                                                    @if($admins && $admins->count() > 0)
+                                                        @foreach($admins as $admin)
+                                                            <option value="{{ $admin->id }}">
+                                                                {{ $admin->nombre }} {{ $admin->apellido }}
+                                                                @if($admin->unidadOrganizacional)
+                                                                    ({{ $admin->unidadOrganizacional->siglas }})
+                                                                @endif
+                                                            </option>
+                                                        @endforeach
+                                                    @else
+                                                        <option value="" disabled>No hay Admins disponibles en esta unidad</option>
+                                                    @endif
+                                                </select>
+                                                @error('admin_id') <span class="text-red-500 dark:text-red-400 text-xs">{{ $message }}</span> @enderror
+                                                <p class="text-xs text-green-600 dark:text-green-400 mt-1">El supervisor será asignado bajo la supervisión del Admin seleccionado.</p>
+                                            </div>
+                                        @endif
+
+                                        {{-- Selector de Supervisor para Conductor --}}
+                                        @if($showSupervisorSelector)
+                                            <div class="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900 border border-yellow-200 dark:border-yellow-700 rounded-lg">
+                                                <h4 class="text-lg font-semibold text-yellow-900 dark:text-yellow-100 mb-3">Asignación de Supervisor</h4>
+                                                <label for="supervisor_id" class="block text-sm font-medium text-yellow-800 dark:text-yellow-200 mb-2">Seleccionar Supervisor de la Unidad *</label>
+                                                <select id="supervisor_id" wire:model="supervisor_id" class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-300 dark:focus:border-indigo-500 focus:ring focus:ring-indigo-200 dark:focus:ring-indigo-600 focus:ring-opacity-50">
+                                                    <option value="">Selecciona un Supervisor</option>
+                                                    @if($supervisors && $supervisors->count() > 0)
+                                                        @foreach($supervisors as $supervisor)
+                                                            <option value="{{ $supervisor->id }}">
+                                                                {{ $supervisor->nombre }} {{ $supervisor->apellido }}
+                                                                @if($supervisor->unidadOrganizacional)
+                                                                    ({{ $supervisor->unidadOrganizacional->siglas }})
+                                                                @endif
+                                                            </option>
+                                                        @endforeach
+                                                    @else
+                                                        <option value="" disabled>No hay Supervisores disponibles en esta unidad</option>
+                                                    @endif
+                                                </select>
                                                 @error('supervisor_id') <span class="text-red-500 dark:text-red-400 text-xs">{{ $message }}</span> @enderror
+                                                <p class="text-xs text-yellow-600 dark:text-yellow-400 mt-1">El conductor será asignado bajo la supervisión del Supervisor seleccionado.</p>
+                                            </div>
+                                        @endif
+
+                                        {{-- Selector de Admin General para Conductor --}}
+                                        @if($showAdminGeneralSelector)
+                                            <div class="mt-4 p-4 bg-indigo-50 dark:bg-indigo-900 border border-indigo-200 dark:border-indigo-700 rounded-lg">
+                                                <h4 class="text-lg font-semibold text-indigo-900 dark:text-indigo-100 mb-3">Admin General de Referencia</h4>
+                                                <label for="admin_id" class="block text-sm font-medium text-indigo-800 dark:text-indigo-200 mb-2">Seleccionar Admin General de Referencia *</label>
+                                                <select id="admin_id" wire:model="admin_id" class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-300 dark:focus:border-indigo-500 focus:ring focus:ring-indigo-200 dark:focus:ring-indigo-600 focus:ring-opacity-50">
+                                                    <option value="">Selecciona un Admin General</option>
+                                                    @if($adminGenerales && $adminGenerales->count() > 0)
+                                                        @foreach($adminGenerales as $adminGeneral)
+                                                            <option value="{{ $adminGeneral->id }}">
+                                                                {{ $adminGeneral->nombre }} {{ $adminGeneral->apellido }}
+                                                                @if($adminGeneral->unidadOrganizacional)
+                                                                    ({{ $adminGeneral->unidadOrganizacional->siglas }})
+                                                                @endif
+                                                            </option>
+                                                        @endforeach
+                                                    @endif
+                                                </select>
+                                                @error('admin_id') <span class="text-red-500 dark:text-red-400 text-xs">{{ $message }}</span> @enderror
+                                                <p class="text-xs text-indigo-600 dark:text-indigo-400 mt-1">Selecciona el Admin General que será responsable de este conductor.</p>
+                                            </div>
+                                        @endif
+
+                                        {{-- Información adicional para supervisores --}}
+                                        @if(auth()->user()->hasRole('Supervisor'))
+                                            <div class="mt-4 p-4 bg-green-50 dark:bg-green-900 border border-green-200 dark:border-green-700 rounded-lg">
+                                                <div class="flex items-center">
+                                                    <svg class="w-5 h-5 text-green-600 dark:text-green-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                    </svg>
+                                                    <div>
+                                                        <p class="text-sm font-medium text-green-800 dark:text-green-200">Información:</p>
+                                                        <p class="text-sm text-green-700 dark:text-green-300">Como supervisor, solo puedes editar usuarios con rol "Conductor/Operador" en tu misma unidad organizacional.</p>
+                                                    </div>
+                                                </div>
                                             </div>
                                         @endif
                                     </div>
@@ -218,7 +324,7 @@
                                             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                                             </svg>
-                                            Actualizar Usuario
+                                            Guardar Cambios
                                         </button>
                                     </div>
                                 </div>

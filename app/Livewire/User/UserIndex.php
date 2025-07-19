@@ -2,151 +2,181 @@
 
 namespace App\Livewire\User;
 
-use App\Models\User; 
+use App\Models\User;
+use App\Models\UnidadOrganizacional;
 use Livewire\Component;
-use Livewire\WithPagination; 
-use Spatie\Permission\Models\Role; 
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests; 
+use Livewire\WithPagination;
+use Spatie\Permission\Models\Role;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Auth;
 
 class UserIndex extends Component
 {
-    use WithPagination, AuthorizesRequests; 
+    use WithPagination, AuthorizesRequests;
 
-    public $search = ''; 
-    public $perPage = 10; 
-    public $roleFilter = ''; // Filtro para roles
-    public $statusFilter = ''; // Filtro para estados
+    public $search = '';
+    public $perPage = 10;
+    public $roleFilter = '';
+    public $statusFilter = '';
+    public $unidadFilter = '';
 
     protected $queryString = [
-        'search' => ['except' => ''], 
-        'perPage', 
+        'search' => ['except' => ''],
+        'perPage',
         'roleFilter' => ['except' => ''],
-        'statusFilter' => ['except' => '']
-    ]; 
+        'statusFilter' => ['except' => ''],
+        'unidadFilter' => ['except' => '']
+    ];
 
-    public function updatingSearch()
+    /**
+     * Determina si el usuario autenticado puede gestionar al usuario objetivo.
+     * Lógica actualizada según la jerarquía específica.
+     */
+    public function canManage(User $targetUser): bool
     {
-        $this->resetPage();
-    }
+        $currentUser = Auth::user();
 
-    public function updatingRoleFilter()
-    {
-        $this->resetPage();
-    }
+        // Nadie puede gestionarse a sí mismo
+        if ($currentUser->id === $targetUser->id) {
+            return false;
+        }
 
-    public function updatingStatusFilter()
-    {
-        $this->resetPage();
-    }
+        // Admin General puede gestionar a todos los usuarios
+        if ($currentUser->hasRole('Admin General')) {
+            return true;
+        }
 
-    public function clearFilters()
-    {
-        $this->search = '';
-        $this->roleFilter = '';
-        $this->statusFilter = '';
-        $this->resetPage();
+        // Admin puede gestionar solo a Supervisores y Conductores de su misma unidad organizacional
+        if ($currentUser->hasRole('Admin')) {
+            return $targetUser->hasRole(['Supervisor', 'Conductor/Operador']) &&
+                   $targetUser->unidad_organizacional_id === $currentUser->unidad_organizacional_id;
+        }
+
+        // Supervisor puede gestionar solo a Conductores/Operadores de su misma unidad y bajo su supervisión
+        if ($currentUser->hasRole('Supervisor')) {
+            return $targetUser->hasRole('Conductor/Operador') &&
+                   $targetUser->unidad_organizacional_id === $currentUser->unidad_organizacional_id &&
+                   $targetUser->supervisor_id === $currentUser->id;
+        }
+
+        return false;
     }
 
     public function deleteUser(User $user)
     {
         $this->authorize('eliminar usuarios');
 
-        $currentUser = User::with('roles')->find(Auth::id());
-
-        // Solo los Administradores pueden eliminar usuarios
-        if (!$currentUser->hasRole('Administrador')) {
-            session()->flash('error', 'No tienes permisos para eliminar usuarios.');
-            return;
-        }
-
-        // Opcional: Evitar que el usuario actual se elimine a sí mismo
-        if (Auth::user()->id === $user->id) {
-            session()->flash('error', 'No puedes eliminar tu propia cuenta.');
+        if (!$this->canManage($user)) {
+            session()->flash('error', 'No tienes permisos para eliminar a este usuario.');
             return;
         }
 
         $user->delete();
-
         session()->flash('message', 'Usuario eliminado correctamente.');
     }
 
-    // Propiedades computadas para las estadísticas
-    public function getActiveUsersCountProperty()
+    /**
+     * Obtiene la consulta base de usuarios que el usuario actual puede gestionar
+     * según la jerarquía específica definida.
+     */
+    private function getManagableUsersQuery()
     {
-        $currentUser = User::with('roles')->find(Auth::id());
-
-        if ($currentUser->hasRole('Administrador')) {
-            // Administradores ven todos los usuarios activos
-            return User::where('estado', 'Activo')->count();
-        } elseif ($currentUser->hasRole('Supervisor')) {
-            // Supervisores solo ven usuarios bajo su supervisión
-            return User::where('estado', 'Activo')
-                      ->where('supervisor_id', $currentUser->id)
-                      ->count();
+        $currentUser = Auth::user();
+        
+        // Admin General puede ver todos los usuarios
+        if ($currentUser->hasRole('Admin General')) {
+            return User::query();
         }
 
-        return 0;
-    }
-
-    public function getPendingUsersCountProperty()
-    {
-        $currentUser = User::with('roles')->find(Auth::id());
-
-        if ($currentUser->hasRole('Administrador')) {
-            // Administradores ven todos los usuarios pendientes
-            return User::where('estado', 'Pendiente')->count();
-        } elseif ($currentUser->hasRole('Supervisor')) {
-            // Supervisores solo ven usuarios pendientes bajo su supervisión
-            return User::where('estado', 'Pendiente')
-                      ->where('supervisor_id', $currentUser->id)
-                      ->count();
+        // Admin puede ver solo Supervisores y Conductores de su misma unidad organizacional
+        if ($currentUser->hasRole('Admin')) {
+            return User::whereHas('roles', function ($q) {
+                $q->whereIn('name', ['Supervisor', 'Conductor/Operador']);
+            })->where('unidad_organizacional_id', $currentUser->unidad_organizacional_id);
         }
 
-        return 0;
-    }
-
-    public function getInactiveUsersCountProperty()
-    {
-        $currentUser = User::with('roles')->find(Auth::id());
-
-        if ($currentUser->hasRole('Administrador')) {
-            // Administradores ven todos los usuarios inactivos
-            return User::where('estado', 'Inactivo')->count();
-        } elseif ($currentUser->hasRole('Supervisor')) {
-            // Supervisores solo ven usuarios inactivos bajo su supervisión
-            return User::where('estado', 'Inactivo')
-                      ->where('supervisor_id', $currentUser->id)
-                      ->count();
+        // Supervisor puede ver solo Conductores/Operadores de su misma unidad y bajo su supervisión
+        if ($currentUser->hasRole('Supervisor')) {
+            return User::where('supervisor_id', $currentUser->id)
+                      ->where('unidad_organizacional_id', $currentUser->unidad_organizacional_id)
+                      ->whereHas('roles', function ($q) {
+                          $q->where('name', 'Conductor/Operador');
+                      });
         }
 
-        return 0;
+        // Si no tiene ninguno de los roles anteriores, no puede ver usuarios
+        return User::where('id', -1);
     }
 
     public function getTotalUsersCountProperty()
     {
-        $currentUser = User::with('roles')->find(Auth::id());
+        return $this->getManagableUsersQuery()->count();
+    }
 
-        if ($currentUser->hasRole('Administrador')) {
-            // Administradores ven todos los usuarios
-            return User::count();
-        } elseif ($currentUser->hasRole('Supervisor')) {
-            // Supervisores solo ven usuarios bajo su supervisión
-            return User::where('supervisor_id', $currentUser->id)->count();
+    public function getActiveUsersCountProperty()
+    {
+        return $this->getManagableUsersQuery()->where('estado', 'Activo')->count();
+    }
+
+    public function getPendingUsersCountProperty()
+    {
+        return $this->getManagableUsersQuery()->where('estado', 'Pendiente')->count();
+    }
+
+    public function getInactiveUsersCountProperty()
+    {
+        return $this->getManagableUsersQuery()->where('estado', 'Inactivo')->count();
+    }
+
+    /**
+     * Obtiene las unidades organizacionales que el usuario puede filtrar
+     */
+    private function getFilterableUnidades()
+    {
+        $currentUser = Auth::user();
+        
+        // Admin General puede filtrar por todas las unidades
+        if ($currentUser->hasRole('Admin General')) {
+            return UnidadOrganizacional::activas()->orderBy('nombre_unidad')->get();
         }
 
-        return 0;
+        // Admin y Supervisor solo pueden filtrar por su propia unidad
+        if ($currentUser->hasRole(['Admin', 'Supervisor']) && $currentUser->unidadOrganizacional) {
+            return collect([$currentUser->unidadOrganizacional]);
+        }
+
+        return collect();
+    }
+
+    /**
+     * Obtiene los roles que el usuario puede filtrar
+     */
+    private function getFilterableRoles()
+    {
+        $currentUser = Auth::user();
+        
+        if ($currentUser->hasRole('Admin General')) {
+            return ['Admin', 'Supervisor', 'Conductor/Operador'];
+        }
+
+        if ($currentUser->hasRole('Admin')) {
+            return ['Supervisor', 'Conductor/Operador'];
+        }
+
+        if ($currentUser->hasRole('Supervisor')) {
+            return ['Conductor/Operador'];
+        }
+
+        return [];
     }
 
     public function render()
     {
         $this->authorize('ver usuarios');
+        $currentUser = Auth::user();
 
-        // Obtener el usuario actual con sus roles
-        $currentUser = User::with('roles')->find(Auth::id());
-
-        // Construir la consulta base
-        $query = User::with(['roles', 'supervisor']);
+        // Iniciar la consulta con los usuarios que el usuario actual puede gestionar
+        $query = $this->getManagableUsersQuery()->with(['roles', 'supervisor', 'unidadOrganizacional']);
 
         // Aplicar filtro de búsqueda
         if ($this->search) {
@@ -157,49 +187,38 @@ class UserIndex extends Component
             });
         }
 
-        // Aplicar filtros según el rol del usuario autenticado
-        if ($currentUser->hasRole('Administrador')) {
-            // Los administradores pueden ver todos los usuarios
-            
-            // Aplicar filtro de rol si está seleccionado
-            if ($this->roleFilter) {
-                if ($this->roleFilter === 'sin-rol') {
-                    $query->whereDoesntHave('roles');
-                } else {
-                    $query->whereHas('roles', function ($subQuery) {
-                        $subQuery->where('name', $this->roleFilter);
-                    });
-                }
-            }
-
-            // Aplicar filtro de estado si está seleccionado
-            if ($this->statusFilter) {
-                $query->where('estado', $this->statusFilter);
-            }
-
-        } elseif ($currentUser->hasRole('Supervisor')) {
-            // Los supervisores solo pueden ver usuarios bajo su supervisión
-            $query->where('supervisor_id', $currentUser->id);
-
-            // Aplicar filtro de estado si está seleccionado
-            if ($this->statusFilter) {
-                $query->where('estado', $this->statusFilter);
+        // Aplicar filtro de rol
+        if ($this->roleFilter) {
+            if ($this->roleFilter === 'sin-rol') {
+                $query->whereDoesntHave('roles');
+            } else {
+                $query->whereHas('roles', fn($q) => $q->where('name', $this->roleFilter));
             }
         }
 
-        // Obtener usuarios paginados
-        $users = $query->latest()->paginate($this->perPage);
+        // Aplicar filtro de estado
+        if ($this->statusFilter) {
+            $query->where('estado', $this->statusFilter);
+        }
 
-        // Obtener roles para la asignación si se muestra en la tabla
-        $roles = Role::all();
+        // Aplicar filtro de unidad organizacional
+        if ($this->unidadFilter) {
+            $query->where('unidad_organizacional_id', $this->unidadFilter);
+        }
+
+        // Excluir al usuario actual de la lista
+        $users = $query->where('id', '!=', $currentUser->id)
+                       ->latest()
+                       ->paginate($this->perPage);
+
+        // Obtener roles y unidades filtrables según el usuario actual
+        $managableRoles = $this->getFilterableRoles();
+        $unidadesOrganizacionales = $this->getFilterableUnidades();
 
         return view('livewire.user.user-index', [
             'users' => $users,
-            'roles' => $roles,
-            'activeUsersCount' => $this->activeUsersCount,
-            'pendingUsersCount' => $this->pendingUsersCount,
-            'inactiveUsersCount' => $this->inactiveUsersCount,
-            'totalUsersCount' => $this->totalUsersCount,
+            'managableRoles' => $managableRoles,
+            'unidadesOrganizacionales' => $unidadesOrganizacionales,
         ]);
     }
 }

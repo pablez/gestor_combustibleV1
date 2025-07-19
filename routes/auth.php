@@ -32,26 +32,26 @@ Route::middleware('auth')->group(function () {
 });
 
 Route::get('/admin/aprobaciones', \App\Livewire\User\ApprovalQueue::class)
-        ->middleware(['auth', 'role:Administrador'])
+        ->middleware(['auth', 'role:Admin General|Admin'])
         ->name('admin.approvals');
 
-// Rutas para Administradores y Supervisores - Gestión de usuarios
-Route::middleware(['auth','role:Administrador|Supervisor'])->group(function () {
+// Rutas para Admines y Supervisores - Gestión de usuarios
+Route::middleware(['auth','role:Admin General|Admin|Supervisor'])->group(function () {
     Route::get('/usuarios', \App\Livewire\User\UserIndex::class)->name('admin.users.index');
     Route::get('/usuarios/crear', \App\Livewire\User\UserCreate::class)->name('admin.users.create');
     Route::get('/usuarios/{user}/editar', \App\Livewire\User\UserEdit::class)->name('admin.users.edit');
     Route::get('/usuarios/{user}/ver', \App\Livewire\User\UserShow::class)->name('admin.users.show');
 });
 
-// Rutas para ver unidades - Accesible para Administrador, Supervisor y Conductor/Operador
-Route::middleware(['auth','role:Administrador|Supervisor|Conductor/Operador'])
+// Rutas para ver unidades - Accesible para Admin, Supervisor y Conductor/Operador
+Route::middleware(['auth','role:Admin General|Admin|Supervisor|Conductor/Operador'])
     ->group(function () {
         Route::get('/unidades', \App\Livewire\UnidadTransporte\UnidadTransporteIndex::class)
             ->name('admin.units.index');
     });
 
-// Rutas para crear y editar unidades - Solo para Administradores
-Route::middleware(['auth','role:Administrador'])->group(function () {
+// Rutas para crear y editar unidades - Solo para Admines
+Route::middleware(['auth','role:Admin'])->group(function () {
     Route::get('/unidades/crear', \App\Livewire\UnidadTransporte\UnidadTransporteCreate::class)->name('admin.units.create');
     Route::get('/unidades/{unitTransport}/editar', \App\Livewire\UnidadTransporte\UnidadTransporteEdit::class)->name('admin.units.edit');
 });
