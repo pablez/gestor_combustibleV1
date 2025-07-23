@@ -62,6 +62,14 @@ class User extends Authenticatable
     }
 
     /**
+     * Alias para compatibilidad: supervisados
+     */
+    public function supervisados()
+    {
+        return $this->hasMany(User::class, 'supervisor_id');
+    }
+
+    /**
      * Relación con los conductores supervisados
      */
     public function conductores()

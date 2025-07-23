@@ -105,16 +105,16 @@
                             </div>
                         </div>
 
-                        {{-- Mostrar Supervisores solo para Admin General --}}
+                        {{-- Mostrar Supervisores y Admins solo para Admin General --}}
                         @if(auth()->user()->hasRole('Admin General'))
                             <div class="bg-orange-50 dark:bg-orange-900 p-4 rounded-lg border border-orange-200 dark:border-orange-700">
                                 <div class="flex items-center">
                                     <svg class="w-8 h-8 text-orange-600 dark:text-orange-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v6a2 2 0 002 2h2m0 0h2a2 2 0 002-2V7a2 2 0 00-2-2H9m0 0V3a2 2 0 012-2h2a2 2 0 012 2v2M9 5v6"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
                                     </svg>
                                     <div>
-                                        <p class="text-sm font-medium text-orange-800 dark:text-orange-200">Supervisores</p>
-                                        <p class="text-2xl font-bold text-orange-900 dark:text-orange-100">{{ $statistics['supervisores'] }}</p>
+                                        <p class="text-sm font-medium text-orange-800 dark:text-orange-200">Admins + Supervisores</p>
+                                        <p class="text-2xl font-bold text-orange-900 dark:text-orange-100">{{ $statistics['admins'] + $statistics['supervisores'] }}</p>
                                     </div>
                                 </div>
                             </div>
@@ -125,15 +125,15 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v6a2 2 0 002 2h2m0 0h2a2 2 0 002-2V7a2 2 0 00-2-2H9m0 0V3a2 2 0 012-2h2a2 2 0 012 2v2M9 5v6"></path>
                                     </svg>
                                     <div>
-                                        <p class="text-sm font-medium text-indigo-800 dark:text-indigo-200">Seleccionados</p>
-                                        <p class="text-2xl font-bold text-indigo-900 dark:text-indigo-100">{{ $statistics['selected'] }}</p>
+                                        <p class="text-sm font-medium text-indigo-800 dark:text-indigo-200">Creados por Supervisores</p>
+                                        <p class="text-2xl font-bold text-indigo-900 dark:text-indigo-100">{{ $statistics['total_visible'] }}</p>
                                     </div>
                                 </div>
                             </div>
                         @endif
                     </div>
 
-                    @if($users->isEmpty())
+                    @if(!$approvalRequests || $approvalRequests->isEmpty())
                         <div class="text-center py-12">
                             <svg class="mx-auto h-12 w-12 text-gray-400 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -141,9 +141,9 @@
                             <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No hay usuarios pendientes</h3>
                             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
                                 @if(auth()->user()->hasRole('Admin General'))
-                                    No hay usuarios Supervisor o Conductor pendientes de aprobación en el sistema.
+                                    No hay usuarios pendientes de aprobación en el sistema.
                                 @else
-                                    No hay usuarios Conductor pendientes de aprobación en tu unidad organizacional.
+                                    No hay usuarios creados por Supervisores pendientes de aprobación en tu unidad organizacional.
                                 @endif
                             </p>
                         </div>
@@ -192,7 +192,12 @@
                                 <thead class="bg-gray-50 dark:bg-gray-700">
                                     <tr>
                                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                            <input type="checkbox" wire:model="selectAll" wire:click="selectAllUsers" class="rounded border-gray-300 dark:border-gray-600 text-indigo-600 dark:text-indigo-500 shadow-sm focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:bg-gray-700">
+                                            <input type="checkbox"
+                                                @if(count($selectedUsers) === $approvalRequests->count() && $approvalRequests->count() > 0)
+                                                    checked
+                                                @endif
+                                                wire:click="selectAllUsers"
+                                                class="rounded border-gray-300 dark:border-gray-600 text-indigo-600 dark:text-indigo-500 shadow-sm focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:bg-gray-700">
                                         </th>
                                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Usuario</th>
                                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Rol Asignado</th>
@@ -205,141 +210,142 @@
                                     </tr>
                                 </thead>
                                 <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                    @foreach ($users as $user)
-                                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150 {{ in_array($user->id, $selectedUsers) ? 'bg-blue-50 dark:bg-blue-900' : '' }}">
-                                            <td class="px-6 py-4 whitespace-nowrap">
-                                                <input type="checkbox" wire:model="selectedUsers" value="{{ $user->id }}" wire:click="toggleUserSelection({{ $user->id }})" class="rounded border-gray-300 dark:border-gray-600 text-indigo-600 dark:text-indigo-500 shadow-sm focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:bg-gray-700">
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap">
-                                                <div class="flex items-center">
-                                                    <div class="flex-shrink-0 h-10 w-10">
-                                                        <img class="h-10 w-10 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600" src="{{ $user->foto_perfil_url }}" alt="Foto de {{ $user->nombre }}">
-                                                    </div>
-                                                    <div class="ml-4">
-                                                        <div class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                                            {{ $user->nombre }} {{ $user->apellido }}
-                                                        </div>
-                                                        <div class="text-sm text-gray-500 dark:text-gray-400">
-                                                            {{ $user->email }}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap">
-                                                @if($user->getRoleNames()->first())
-                                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                                        @if($user->hasRole('Admin')) bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 @endif
-                                                        @if($user->hasRole('Supervisor')) bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 @endif
-                                                        @if($user->hasRole('Conductor/Operador')) bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 @endif">
-                                                        {{ $user->getRoleNames()->first() }}
-                                                    </span>
-                                                @else
-                                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
-                                                        Sin Rol
-                                                    </span>
-                                                @endif
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap">
-                                                @if($user->unidadOrganizacional)
-                                                    <div class="flex flex-col">
-                                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mb-1
-                                                            @if($user->unidadOrganizacional->tipo_unidad == 'Superior') bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200 @endif
-                                                            @if($user->unidadOrganizacional->tipo_unidad == 'Ejecutiva') bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 @endif">
-                                                            {{ $user->unidadOrganizacional->siglas }}
-                                                        </span>
-                                                        <span class="text-xs text-gray-400 dark:text-gray-500">{{ $user->unidadOrganizacional->tipo_unidad }}</span>
-                                                    </div>
-                                                @else
-                                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
-                                                        Sin Unidad
-                                                    </span>
-                                                @endif
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap">
-                                                @if($user->supervisor)
-                                                    <div class="flex items-center">
-                                                        <img class="h-6 w-6 rounded-full object-cover mr-2" src="{{ $user->supervisor->foto_perfil_url }}" alt="Creador">
-                                                        <div>
-                                                            <div class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                                                {{ $user->supervisor->nombre }} {{ $user->supervisor->apellido }}
-                                                            </div>
-                                                            <div class="text-xs text-gray-500 dark:text-gray-400">
-                                                                @if($user->hasRole('Supervisor'))
-                                                                    {{-- Supervisor fue creado por Admin --}}
-                                                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                                                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                                                                        </svg>
-                                                                        Creado por Admin
-                                                                    </span>
-                                                                    <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                                                                        Admin: {{ $user->supervisor->nombre }} {{ $user->supervisor->apellido }}
-                                                                    </div>
-                                                                @elseif($user->hasRole('Conductor/Operador'))
-                                                                    {{-- Conductor - verificar quién lo creó --}}
-                                                                    @if($user->supervisor->hasRole('Supervisor'))
-                                                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                                                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 01-3 0m3 0H9m1.5 0H9m0 0H6"></path>
-                                                                            </svg>
-                                                                            Creado por Supervisor
-                                                                        </span>
-                                                                        <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                                                                            Supervisor: {{ $user->supervisor->nombre }} {{ $user->supervisor->apellido }}
-                                                                        </div>
-                                                                    @elseif($user->supervisor->hasRole('Admin'))
-                                                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
-                                                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                                                                            </svg>
-                                                                            Creado por Admin
-                                                                        </span>
-                                                                        <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                                                                            Admin: {{ $user->supervisor->nombre }} {{ $user->supervisor->apellido }}
-                                                                        </div>
-                                                                    @endif
-                                                                @endif
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                @else
-                                                    <span class="text-xs text-gray-400 dark:text-gray-500 italic">Sin supervisor asignado</span>
-                                                @endif
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                                                <div class="flex flex-col">
-                                                    <span class="font-medium">{{ $user->created_at->format('d/m/Y') }}</span>
-                                                    <span class="text-xs">{{ $user->created_at->format('H:i') }}</span>
-                                                    <span class="text-xs text-gray-400 dark:text-gray-500">{{ $user->created_at->diffForHumans() }}</span>
-                                                </div>
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                                <div class="flex space-x-2">
-                                                    <button wire:click="viewDetails({{ $user->id }})" class="inline-flex items-center px-3 py-1 bg-blue-600 dark:bg-blue-500 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 disabled:opacity-25 transition ease-in-out duration-150">
-                                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                                                        </svg>
-                                                        Ver
-                                                    </button>
-                                                
-                                                    <button wire:click="openIndividualApproval({{ $user->id }})" class="inline-flex items-center px-3 py-1 bg-green-600 dark:bg-green-500 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-700 dark:hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 disabled:opacity-25 transition ease-in-out duration-150">
-                                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                                        </svg>
-                                                        Aprobar
-                                                    </button>
-                                                
-                                                    <button wire:click="reject({{ $user->id }})" wire:confirm="¿Estás seguro de que quieres rechazar y eliminar a este usuario? Esta acción no se puede deshacer." class="inline-flex items-center px-3 py-1 bg-red-600 dark:bg-red-500 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-red-700 dark:hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 disabled:opacity-25 transition ease-in-out duration-150">
-                                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                                        </svg>
-                                                        Rechazar
-                                                    </button>
-                                                </div>
+                                    @if($approvalRequests->isEmpty())
+                                        <tr>
+                                            <td colspan="6" class="px-6 py-12 text-center">
+                                                <svg class="mx-auto h-12 w-12 text-gray-400 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                </svg>
+                                                <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No hay usuarios pendientes</h3>
+                                                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                                                    @if(auth()->user()->hasRole('Admin General'))
+                                                        No hay usuarios Supervisor o Conductor pendientes de aprobación en el sistema.
+                                                    @else
+                                                        No hay usuarios creados por Admins o Supervisores pendientes de aprobación en tu unidad organizacional.
+                                                    @endif
+                                                </p>
                                             </td>
                                         </tr>
-                                    @endforeach
+                                    @else
+                                        @foreach ($approvalRequests as $request)
+                                            @php
+                                                $user = $request->usuario; // Obtener el usuario de la solicitud
+                                            @endphp
+                                            @if($user) {{-- Verificar que el usuario existe --}}
+                                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150 {{ in_array($request->id, $selectedUsers) ? 'bg-blue-50 dark:bg-blue-900' : '' }}">
+                                                    <td class="px-6 py-4 whitespace-nowrap">
+                                                        <input type="checkbox"
+                                                            @if(in_array($request->id, $selectedUsers)) checked @endif
+                                                            wire:click="toggleUserSelection({{ $request->id }})"
+                                                            class="rounded border-gray-300 dark:border-gray-600 text-indigo-600 dark:text-indigo-500 shadow-sm focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:bg-gray-700">
+                                                    </td>
+                                                    <td class="px-6 py-4 whitespace-nowrap">
+                                                        <div class="flex items-center">
+                                                            <div class="flex-shrink-0 h-10 w-10">
+                                                                <img class="h-10 w-10 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600" src="{{ $user->foto_perfil_url }}" alt="Foto de {{ $user->nombre }}">
+                                                            </div>
+                                                            <div class="ml-4">
+                                                                <div class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                                                    {{ $user->nombre }} {{ $user->apellido }}
+                                                                </div>
+                                                                <div class="text-sm text-gray-500 dark:text-gray-400">
+                                                                    {{ $user->email }}
+                                                                </div>
+                                                                {{-- Mostrar información de la solicitud --}}
+                                                                <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                                                                    Solicitud #{{ $request->id }} - {{ $request->tipo_solicitud }}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td class="px-6 py-4 whitespace-nowrap">
+                                                        {{-- Mostrar el rol solicitado de la solicitud --}}
+                                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                                            @if($request->rol_solicitado == 'Admin') bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 @endif
+                                                            @if($request->rol_solicitado == 'Supervisor') bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 @endif
+                                                            @if($request->rol_solicitado == 'Conductor/Operador') bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 @endif">
+                                                            {{ $request->rol_solicitado }}
+                                                        </span>
+                                                    </td>
+                                                    <td class="px-6 py-4 whitespace-nowrap">
+                                                        @if($user->unidadOrganizacional)
+                                                            <div class="flex flex-col">
+                                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mb-1
+                                                                    @if($user->unidadOrganizacional->tipo_unidad == 'Superior') bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200 @endif
+                                                                    @if($user->unidadOrganizacional->tipo_unidad == 'Ejecutiva') bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 @endif">
+                                                                    {{ $user->unidadOrganizacional->siglas }}
+                                                                </span>
+                                                                <span class="text-xs text-gray-400 dark:text-gray-500">{{ $user->unidadOrganizacional->tipo_unidad }}</span>
+                                                            </div>
+                                                        @else
+                                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
+                                                                Sin Unidad
+                                                            </span>
+                                                        @endif
+                                                    </td>
+                                                    <td class="px-6 py-4 whitespace-nowrap">
+                                                        {{-- Mostrar información del creador desde la solicitud --}}
+                                                        @if($request->creador)
+                                                            <div class="flex items-center">
+                                                                <img class="h-6 w-6 rounded-full object-cover mr-2" src="{{ $request->creador->foto_perfil_url }}" alt="Creador">
+                                                                <div>
+                                                                    <div class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                                                        {{ $request->creador->nombre }} {{ $request->creador->apellido }}
+                                                                    </div>
+                                                                    <div class="text-xs text-gray-500 dark:text-gray-400">
+                                                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium 
+                                                                            @if($request->rol_creador == 'Admin') bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 @endif
+                                                                            @if($request->rol_creador == 'Supervisor') bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 @endif">
+                                                                            {{ $request->rol_creador }}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        @else
+                                                            <span class="text-xs text-gray-400 dark:text-gray-500 italic">Sin información de creador</span>
+                                                        @endif
+                                                    </td>
+                                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                                        <div class="flex flex-col">
+                                                            <span class="font-medium">{{ $request->created_at->format('d/m/Y') }}</span>
+                                                            <span class="text-xs">{{ $request->created_at->format('H:i') }}</span>
+                                                            <span class="text-xs text-gray-400 dark:text-gray-500">{{ $request->created_at->diffForHumans() }}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                        <div class="flex space-x-2">
+                                                            {{-- CORREGIR: Usar el ID de la solicitud --}}
+                                                            <button wire:click="viewDetails({{ $request->id }})" class="inline-flex items-center px-3 py-1 bg-blue-600 dark:bg-blue-500 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 disabled:opacity-25 transition ease-in-out duration-150">
+                                                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                                                </svg>
+                                                                Ver
+                                                            </button>
+                                                        
+
+                                                            {{-- CORREGIR: Usar el ID de la solicitud --}}
+                                                            <button wire:click="openIndividualApproval({{ $request->id }})" class="inline-flex items-center px-3 py-1 bg-green-600 dark:bg-green-500 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-700 dark:hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 disabled:opacity-25 transition ease-in-out duration-150">
+                                                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                                                </svg>
+                                                                Aprobar
+                                                            </button>
+                                                        
+
+                                                            {{-- CORREGIR: Usar el ID de la solicitud --}}
+                                                            <button wire:click="reject({{ $request->id }})" wire:confirm="¿Estás seguro de que quieres rechazar y eliminar a este usuario? Esta acción no se puede deshacer." class="inline-flex items-center px-3 py-1 bg-red-600 dark:bg-red-500 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-red-700 dark:hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 disabled:opacity-25 transition ease-in-out duration-150">
+                                                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                                </svg>
+                                                                Rechazar
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            @endif
+                                        @endforeach
+                                    @endif
                                 </tbody>
                             </table>
                         </div>
@@ -351,7 +357,7 @@
 
     {{-- Modal para aprobación múltiple --}}
     @if($showBulkApproval)
-        <div class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="fixed inset-0 z-60 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
             <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
                 <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
                 <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
@@ -415,7 +421,7 @@
 
     {{-- Modal para aprobación individual --}}
     @if($showIndividualApproval && $userToApprove)
-        <div class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="fixed inset-0 z-60 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
             <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
                 <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
                 <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
@@ -479,7 +485,7 @@
 
     {{-- Modal para ver detalles del usuario --}}
     @if($showUserDetails && $selectedUser)
-        <div class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="fixed inset-0 z-40 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
             <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
                 <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" wire:click="closeUserDetails"></div>
 
@@ -490,8 +496,24 @@
                         <div class="sm:flex sm:items-start">
                             <div class="mt-3 text-center sm:mt-0 sm:text-left w-full">
                                 <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-gray-100" id="modal-title">
-                                    Detalles del Usuario {{ $selectedUser->getRoleNames()->first() }}
+                                    Detalles de la Solicitud de Aprobación
                                 </h3>
+                                
+                                {{-- Mostrar información de la solicitud si está disponible --}}
+                                @if($approvalRequest)
+                                    <div class="mt-2 p-3 bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 rounded-lg">
+                                        <h5 class="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">Información de la Solicitud</h5>
+                                        <div class="text-xs text-blue-600 dark:text-blue-400 space-y-1">
+                                            <p><strong>ID Solicitud:</strong> #{{ $approvalRequest->id }}</p>
+                                            <p><strong>Tipo:</strong> {{ ucfirst(str_replace('_', ' ', $approvalRequest->tipo_solicitud)) }}</p>
+                                            <p><strong>Estado:</strong> {{ ucfirst($approvalRequest->estado) }}</p>
+                                            <p><strong>Rol Solicitado:</strong> {{ $approvalRequest->rol_solicitado }}</p>
+                                            <p><strong>Creado por:</strong> {{ $approvalRequest->creador->nombre ?? 'Desconocido' }} ({{ $approvalRequest->rol_creador }})</p>
+                                            <p><strong>Fecha de Solicitud:</strong> {{ $approvalRequest->created_at->format('d/m/Y H:i') }}</p>
+                                        </div>
+                                    </div>
+                                @endif
+                                
                                 <div class="mt-4">
                                     <div class="flex items-center space-x-4 mb-6">
                                         <img src="{{ $selectedUser->foto_perfil_url }}" alt="Foto de perfil" class="w-16 h-16 object-cover rounded-full border-2 border-gray-300 dark:border-gray-600">
@@ -612,18 +634,21 @@
                         </div>
                     </div>
                     <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                        <button wire:click="openIndividualApproval({{ $selectedUser->id }})" type="button" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:ml-3 sm:w-auto sm:text-sm">
-                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                            </svg>
-                            Aprobar {{ $selectedUser->getRoleNames()->first() }}
-                        </button>
-                        <button wire:click="reject({{ $selectedUser->id }})" wire:confirm="¿Estás seguro de que quieres rechazar y eliminar a este usuario? Esta acción no se puede deshacer." type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
-                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                            </svg>
-                            Rechazar
-                        </button>
+                        {{-- Actualizar botones para usar approvalRequest->id --}}
+                        @if($approvalRequest)
+                            <button wire:click="openIndividualApproval({{ $approvalRequest->id }})" type="button" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:ml-3 sm:w-auto sm:text-sm">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                                Aprobar {{ $approvalRequest->rol_solicitado }}
+                            </button>
+                            <button wire:click="reject({{ $approvalRequest->id }})" wire:confirm="¿Estás seguro de que quieres rechazar y eliminar a este usuario? Esta acción no se puede deshacer." type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                                Rechazar
+                            </button>
+                        @endif
                         <button wire:click="closeUserDetails" type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-800 text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
                             Cerrar
                         </button>
@@ -633,3 +658,35 @@
         </div>
     @endif
 </div>
+
+{{-- Script para mejorar la gestión de modales --}}
+<script>
+document.addEventListener('livewire:init', () => {
+    // Escuchar eventos de Livewire para gestión de modales
+    Livewire.on('modal-opened', (event) => {
+        document.body.style.overflow = 'hidden';
+    });
+    
+    Livewire.on('modal-closed', (event) => {
+        document.body.style.overflow = 'auto';
+    });
+    
+    // Manejar tecla Escape para cerrar modales
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            // Cerrar modal de aprobación individual si está abierto
+            if (@this.showIndividualApproval) {
+                @this.closeIndividualApproval();
+            }
+            // Cerrar modal de aprobación múltiple si está abierto
+            else if (@this.showBulkApproval) {
+                @this.closeBulkApproval();
+            }
+            // Cerrar modal de detalles si está abierto
+            else if (@this.showUserDetails) {
+                @this.closeUserDetails();
+            }
+        }
+    });
+});
+</script>

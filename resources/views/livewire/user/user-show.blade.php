@@ -215,11 +215,11 @@
                                     @endif
 
                                     {{-- Usuarios que supervisa --}}
-                                    @if($directSupervisees->count() > 0)
+                                    @if($user->supervisados->count() > 0)
                                         <div>
                                             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Usuarios que Supervisa</label>
                                             <div class="mt-1 space-y-2">
-                                                @foreach($directSupervisees as $supervisee)
+                                                @foreach($user->supervisados as $supervisee)
                                                     <div class="flex items-center p-2 bg-green-50 dark:bg-green-900 border border-green-200 dark:border-green-700 rounded-lg">
                                                         <img src="{{ $supervisee->foto_perfil_url }}" alt="Foto usuario" class="w-6 h-6 rounded-full mr-2">
                                                         <div class="flex-1">

@@ -64,14 +64,16 @@ $logout = function (Logout $logout) {
                         @php
                             $currentUser = auth()->user();
                             
-                            // Filtrar usuarios pendientes según el rol
+                            // Usar la nueva tabla de aprobaciones para contar pendientes
                             if ($currentUser->hasRole('Admin General')) {
-                                // Admin General ve todos los usuarios pendientes
-                                $pendingCount = \App\Models\User::where('estado', 'Pendiente')->count();
+                                // Admin General ve todas las solicitudes pendientes del sistema
+                                $pendingCount = \App\Models\UserApprovalRequest::where('estado', 'pendiente')->count();
                             } else {
-                                // Admin solo ve usuarios pendientes de su unidad organizacional
-                                $pendingCount = \App\Models\User::where('estado', 'Pendiente')
+                                // Admin ve solo Conductores creados por Supervisores de su unidad
+                                $pendingCount = \App\Models\UserApprovalRequest::where('estado', 'pendiente')
                                     ->where('unidad_organizacional_id', $currentUser->unidad_organizacional_id)
+                                    ->where('rol_creador', 'Supervisor')
+                                    ->where('rol_solicitado', 'Conductor/Operador')
                                     ->count();
                             }
                         @endphp
@@ -84,6 +86,16 @@ $logout = function (Logout $logout) {
                                 @if($pendingCount > 0)
                                     <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-500 rounded-full animate-pulse">{{ $pendingCount }}</span>
                                 @endif
+                            </div>
+                        </x-nav-link>
+
+                        {{-- Nuevo enlace para Reportes de Aprobaciones --}}
+                        <x-nav-link :href="route('admin.reports.approval')" :active="request()->routeIs('admin.reports.approval')" wire:navigate>
+                            <div class="flex items-center space-x-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                                <span>{{ __('Reportes') }}</span>
                             </div>
                         </x-nav-link>
                     @endif
@@ -234,12 +246,16 @@ $logout = function (Logout $logout) {
                 @php
                     $currentUser = auth()->user();
                     
-                    // Filtrar usuarios pendientes según el rol (mismo código que arriba)
+                    // Usar la nueva tabla de aprobaciones para contar pendientes
                     if ($currentUser->hasRole('Admin General')) {
-                        $pendingCount = \App\Models\User::where('estado', 'Pendiente')->count();
+                        // Admin General ve todas las solicitudes pendientes del sistema
+                        $pendingCount = \App\Models\UserApprovalRequest::where('estado', 'pendiente')->count();
                     } else {
-                        $pendingCount = \App\Models\User::where('estado', 'Pendiente')
+                        // Admin ve solo Conductores creados por Supervisores de su unidad
+                        $pendingCount = \App\Models\UserApprovalRequest::where('estado', 'pendiente')
                             ->where('unidad_organizacional_id', $currentUser->unidad_organizacional_id)
+                            ->where('rol_creador', 'Supervisor')
+                            ->where('rol_solicitado', 'Conductor/Operador')
                             ->count();
                     }
                 @endphp
@@ -254,6 +270,16 @@ $logout = function (Logout $logout) {
                         @if($pendingCount > 0)
                             <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-500 rounded-full">{{ $pendingCount }}</span>
                         @endif
+                    </div>
+                </x-responsive-nav-link>
+
+                {{-- Nuevo enlace para Reportes de Aprobaciones --}}
+                <x-responsive-nav-link :href="route('admin.reports.approval')" :active="request()->routeIs('admin.reports.approval')" wire:navigate>
+                    <div class="flex items-center space-x-3">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        <span>{{ __('Reportes') }}</span>
                     </div>
                 </x-responsive-nav-link>
             @endif

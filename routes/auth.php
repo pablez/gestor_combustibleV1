@@ -35,6 +35,10 @@ Route::get('/admin/aprobaciones', \App\Livewire\User\ApprovalQueue::class)
         ->middleware(['auth', 'role:Admin General|Admin'])
         ->name('admin.approvals');
 
+Route::get('/admin/reportes/aprobaciones', \App\Livewire\Reports\ApprovalReports::class)
+    ->middleware(['auth', 'role:Admin General|Admin'])
+    ->name('admin.reports.approval');
+
 // Rutas para Admines y Supervisores - Gestión de usuarios
 Route::middleware(['auth','role:Admin General|Admin|Supervisor'])->group(function () {
     Route::get('/usuarios', \App\Livewire\User\UserIndex::class)->name('admin.users.index');

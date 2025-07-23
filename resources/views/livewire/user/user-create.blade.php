@@ -59,9 +59,9 @@
                                 </p>
                                 <p class="text-sm text-blue-700 dark:text-blue-300">
                                     @if(auth()->user()->hasRole('Admin General'))
-                                        Puedes crear usuarios de cualquier rol y asignarlos a cualquier unidad organizacional. Solo tú puedes crear usuarios directamente activos.
+                                        Puedes crear usuarios de cualquier rol y asignarlos a cualquier unidad organizacional. Solo tú puedes crear usuarios directamente activos. Cuando creas un Admin, automáticamente estará bajo tu supervisión.
                                     @elseif(auth()->user()->hasRole('Admin'))
-                                        Puedes crear Supervisores y Conductores para tu unidad organizacional. Los usuarios requerirán aprobación del Admin General.
+                                        Puedes crear Supervisores y Conductores para tu unidad organizacional. Los usuarios requerirán aprobación del Admin General del sistema.
                                     @elseif(auth()->user()->hasRole('Supervisor'))
                                         Solo puedes crear Conductores para tu unidad organizacional. Los usuarios requerirán aprobación de un administrador.
                                     @endif
@@ -278,6 +278,27 @@
                                                     @endforeach
                                                 </select>
                                                 @error('unidad_organizacional_id') <span class="text-red-500 dark:text-red-400 text-xs">{{ $message }}</span> @enderror
+                                            </div>
+                                        @endif
+
+                                        {{-- Información automática para Admin General creando Admin --}}
+                                        @if(auth()->user()->hasRole('Admin General') && $selectedRole == $adminRoleId && $unidad_organizacional_id)
+                                            <div class="mt-4 p-4 bg-purple-50 dark:bg-purple-900 border border-purple-200 dark:border-purple-700 rounded-lg">
+                                                <div class="flex items-start">
+                                                    <svg class="w-5 h-5 text-purple-600 dark:text-purple-400 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                    </svg>
+                                                    <div>
+                                                        <p class="text-sm font-medium text-purple-800 dark:text-purple-200">Supervisión Automática</p>
+                                                        <p class="text-sm text-purple-700 dark:text-purple-300">
+                                                            Como Admin General, automáticamente serás el supervisor directo de este Admin. 
+                                                            El usuario será creado directamente activo y bajo tu supervisión.
+                                                        </p>
+                                                        <p class="text-sm text-purple-700 dark:text-purple-300 mt-2">
+                                                            <strong>Unidad asignada:</strong> {{ $unidadesOrganizacionales->where('id_unidad_organizacional', $unidad_organizacional_id)->first()->siglas ?? 'Seleccionada' }}
+                                                        </p>
+                                                    </div>
+                                                </div>
                                             </div>
                                         @endif
 

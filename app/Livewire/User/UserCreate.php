@@ -2,6 +2,7 @@
 
 namespace App\Livewire\User;
 
+use App\Models\UserApprovalRequest;
 use App\Models\User;
 use App\Models\UnidadOrganizacional;
 use Livewire\Component;
@@ -105,13 +106,18 @@ class UserCreate extends Component
 
         $currentUser = Auth::user();
 
-        // Validaciones específicas según el rol del usuario autenticado y el rol seleccionado
+                // Validaciones específicas según el rol del usuario autenticado y el rol seleccionado
         if ($currentUser->hasRole('Admin General')) {
             // Admin General creando cualquier rol
             if ($this->selectedRole == $this->adminRoleId || 
                 $this->selectedRole == $this->supervisorRoleId || 
                 $this->selectedRole == $this->conductorRoleId) {
                 $rules['unidad_organizacional_id'] = ['required', 'integer', 'exists:unidad_organizacionals,id_unidad_organizacional'];
+            }
+            
+            // Admin General creando Admin: supervisor_id se asigna automáticamente al Admin General
+            if ($this->selectedRole == $this->adminRoleId) {
+                // No necesita validación del supervisor_id porque se asigna automáticamente
             }
             
             // Admin General creando Supervisor necesita seleccionar Admin de la unidad
@@ -150,7 +156,7 @@ class UserCreate extends Component
         ]);
     }
 
-    // Hook que se ejecuta cuando cambia el rol seleccionado
+        // Hook que se ejecuta cuando cambia el rol seleccionado
     public function updatedSelectedRole($value)
     {
         // Resetear todo
@@ -160,10 +166,21 @@ class UserCreate extends Component
 
         if ($currentUser->hasRole('Admin General')) {
             // Admin General puede crear cualquier rol
-            if ($value == $this->adminRoleId || 
-                $value == $this->supervisorRoleId || 
-                $value == $this->conductorRoleId) {
+            if ($value == $this->adminRoleId) {
+                // Admin General creando Admin: necesita seleccionar unidad y se asigna automáticamente como supervisor
                 $this->showUnidadSelector = true;
+                $this->showSupervisorSelector = false;
+                $this->showAdminSelector = false;
+            } elseif ($value == $this->supervisorRoleId) {
+                // Admin General creando Supervisor: necesita seleccionar unidad y luego Admin de esa unidad
+                $this->showUnidadSelector = true;
+                $this->showSupervisorSelector = false;
+                $this->showAdminSelector = false; // Se activará cuando seleccione la unidad
+            } elseif ($value == $this->conductorRoleId) {
+                // Admin General creando Conductor: necesita seleccionar unidad y luego Supervisor de esa unidad
+                $this->showUnidadSelector = true;
+                $this->showSupervisorSelector = false;
+                $this->showAdminSelector = false;
             }
         } elseif ($currentUser->hasRole('Admin')) {
             if ($value == $this->supervisorRoleId) {
@@ -189,7 +206,7 @@ class UserCreate extends Component
         }
     }
 
-    // Hook que se ejecuta cuando cambia la unidad organizacional (solo para Admin General)
+        // Hook que se ejecuta cuando cambia la unidad organizacional (solo para Admin General)
     public function updatedUnidadOrganizacionalId($value)
     {
         if ($value && Auth::user()->hasRole('Admin General')) {
@@ -200,12 +217,16 @@ class UserCreate extends Component
             $this->showSupervisorSelector = false;
             $this->showAdminSelector = false;
             
-            if ($this->selectedRole == $this->supervisorRoleId) {
-                // Admin General creando Supervisor: cargar Admins de la unidad
+            if ($this->selectedRole == $this->adminRoleId) {
+                // Admin General creando Admin: se asigna automáticamente como supervisor
+                $this->supervisor_id = Auth::user()->id;
+                // No necesita mostrar selectores adicionales
+            } elseif ($this->selectedRole == $this->supervisorRoleId) {
+                // Admin General creando Supervisor: debe seleccionar Admin de la unidad
                 $this->loadAdminsForUnidad($value);
                 $this->showAdminSelector = true;
             } elseif ($this->selectedRole == $this->conductorRoleId) {
-                // Admin General creando Conductor: cargar Supervisores de la unidad
+                // Admin General creando Conductor: debe seleccionar Supervisor de la unidad
                 $this->loadSupervisorsForUnidad($value);
                 $this->showSupervisorSelector = true;
             }
@@ -300,6 +321,15 @@ class UserCreate extends Component
             // pero el Admin sigue siendo el creador conceptual
         }
 
+        // Validación específica para el Admin General
+        if ($authenticatedUser->hasRole('Admin General')) {
+            // NUEVA LÓGICA: Admin General creando Admin se asigna automáticamente como supervisor
+            if ($this->selectedRole == $this->adminRoleId) {
+                $this->supervisor_id = $authenticatedUser->id;
+            }
+            // Para Supervisor y Conductor, el supervisor se selecciona manualmente
+        }
+
         $this->validate();
 
         // Validaciones adicionales
@@ -341,6 +371,11 @@ class UserCreate extends Component
         $mensaje = $this->getSuccessMessage($authenticatedUser, $newUser);
         
         session()->flash('success', $mensaje);
+
+        // **NUEVA FUNCIONALIDAD**: Crear solicitud de aprobación si no es Admin General
+        if (!$authenticatedUser->hasRole('Admin General')) {
+            $this->createApprovalRequest($newUser, $authenticatedUser, $role);
+        }
 
         return redirect()->route('admin.users.index');
     }
@@ -510,6 +545,36 @@ class UserCreate extends Component
                 'unidad_organizacional_id' => 'Como Admin, solo puedes crear usuarios para tu propia unidad organizacional.',
             ]);
         }
+    }
+
+    /**
+     * Crea una solicitud de aprobación para el usuario
+     */
+    private function createApprovalRequest(User $newUser, User $creator, $role)
+    {
+        UserApprovalRequest::create([
+            'usuario_id' => $newUser->id,                    // Usar nombres en español
+            'creado_por' => $creator->id,
+            'supervisor_asignado_id' => $this->supervisor_id,
+            'tipo_solicitud' => 'nuevo_usuario',
+            'estado' => 'pendiente',
+            'rol_solicitado' => $role->name,
+            'razon' => "Solicitud de creación de usuario {$role->name} por {$creator->roles->first()->name}",
+            'rol_creador' => $creator->roles->first()->name ?? 'Sin rol',
+            'unidad_organizacional_id' => $this->unidad_organizacional_id,
+            'datos_usuario' => [
+                'nombre' => $this->nombre,
+                'apellido' => $this->apellido,
+                'email' => $this->email,
+                'unidad_siglas' => $newUser->unidadOrganizacional->siglas ?? 'Sin unidad',
+                'created_at' => now()->toDateTimeString(),
+            ],
+            'metadatos_aprobacion' => [
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+                'creation_context' => 'web_form',
+            ]
+        ]);
     }
 
     public function render()

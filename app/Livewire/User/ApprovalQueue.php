@@ -1,7 +1,8 @@
 <?php
-
 namespace App\Livewire\User;
 
+
+use App\Models\UserApprovalRequest;
 use App\Models\User;
 use Livewire\Component;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -27,6 +28,7 @@ class ApprovalQueue extends Component
     public $individualEmail = '';
     public $individualPassword = '';
     public $userToApprove = null;
+    public $approvalRequest = null; // Agregar propiedad para la solicitud de aprobación
 
     public function mount()
     {
@@ -34,62 +36,63 @@ class ApprovalQueue extends Component
     }
 
     /**
-     * Obtiene la consulta de usuarios pendientes según el rol del usuario autenticado
+     * Obtiene la consulta de solicitudes de aprobación según el rol del usuario autenticado
      */
     private function getPendingUsersQuery()
     {
         $currentUser = Auth::user();
         
-        // Admin General puede ver todos los usuarios pendientes (Supervisores y Conductores)
-        if ($currentUser->hasRole('Admin General')) {
-            return User::where('estado', 'Pendiente')
-                ->whereHas('roles', function($query) {
-                    $query->whereIn('name', ['Supervisor', 'Conductor/Operador']);
-                })
-                ->with(['roles', 'supervisor', 'unidadOrganizacional']);
+        try {
+            if ($currentUser->hasRole('Admin General')) {
+                // Admin General ve TODAS las solicitudes pendientes del sistema
+                return UserApprovalRequest::with([
+                    'usuario.roles', 
+                    'usuario.unidadOrganizacional',
+                    'creador',
+                    'supervisorAsignado'
+                ])->where('estado', 'pendiente')
+                  ->orderBy('created_at', 'asc');
+                
+            } elseif ($currentUser->hasRole('Admin')) {
+                // Admin puede ver solo usuarios nuevos creados por supervisores de su misma unidad organizacional
+                return UserApprovalRequest::with([
+                    'usuario.roles', 
+                    'usuario.unidadOrganizacional',
+                    'creador',
+                    'supervisorAsignado'
+                ])->where('estado', 'pendiente')
+                  ->where('unidad_organizacional_id', $currentUser->unidad_organizacional_id)
+                  ->where('rol_creador', 'Supervisor')
+                  ->orderBy('created_at', 'asc');
+            }
+        } catch (\Exception $e) {
+            \Log::error('Error en getPendingUsersQuery: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
         }
         
-        // Admin solo puede ver usuarios pendientes de rol Conductor de su propia unidad organizacional
-        // PERO SOLO los que fueron creados por Supervisores de su unidad (NO los que él creó)
-        if ($currentUser->hasRole('Admin')) {
-            return User::where('estado', 'Pendiente')
-                ->where('unidad_organizacional_id', $currentUser->unidad_organizacional_id)
-                ->whereHas('roles', function($query) {
-                    $query->where('name', 'Conductor/Operador');
-                })
-                ->whereHas('supervisor', function($query) use ($currentUser) {
-                    // Solo usuarios creados por Supervisores de la misma unidad
-                    $query->whereHas('roles', function($subQuery) {
-                        $subQuery->where('name', 'Supervisor');
-                    })->where('unidad_organizacional_id', $currentUser->unidad_organizacional_id);
-                })
-                ->with(['roles', 'supervisor', 'unidadOrganizacional']);
-        }
-        
-        // Otros roles no tienen acceso
-        return User::where('id', -1);
+        // Retornar consulta vacía para otros roles o errores
+        return UserApprovalRequest::whereRaw('1 = 0');
     }
 
     /**
-     * Verifica si el usuario actual puede aprobar/rechazar al usuario específico
+     * Verifica si el usuario actual puede aprobar/rechazar una solicitud específica
      */
-    private function canManageUser(User $user)
+    private function canManageRequest(UserApprovalRequest $request)
     {
         $currentUser = Auth::user();
         
-        // Admin General puede aprobar usuarios Supervisor y Conductor de todas las unidades
         if ($currentUser->hasRole('Admin General')) {
-            return $user->hasRole(['Supervisor', 'Conductor/Operador']);
+            // Admin General puede aprobar CUALQUIER solicitud pendiente del sistema
+            return $request->estado === 'pendiente';
         }
         
-        // Admin solo puede aprobar usuarios Conductor de su propia unidad organizacional
-        // Y SOLO si fueron creados por Supervisores de su unidad
         if ($currentUser->hasRole('Admin')) {
-            return $user->unidad_organizacional_id === $currentUser->unidad_organizacional_id &&
-                   $user->hasRole('Conductor/Operador') &&
-                   $user->supervisor && 
-                   $user->supervisor->hasRole('Supervisor') &&
-                   $user->supervisor->unidad_organizacional_id === $currentUser->unidad_organizacional_id;
+            // Admin puede aprobar solo usuarios creados por Supervisores de su unidad organizacional
+            // NO puede aprobar usuarios que él mismo creó (requiere aprobación del Admin General)
+            return $request->estado === 'pendiente' &&
+                   $request->unidad_organizacional_id === $currentUser->unidad_organizacional_id &&
+                   $request->rol_creador === 'Supervisor' &&
+                   $request->creado_por !== $currentUser->id;
         }
         
         return false;
@@ -98,12 +101,12 @@ class ApprovalQueue extends Component
     /**
      * Selecciona o deselecciona un usuario para aprobación múltiple
      */
-    public function toggleUserSelection($userId)
+    public function toggleUserSelection($requestId)
     {
-        if (in_array($userId, $this->selectedUsers)) {
-            $this->selectedUsers = array_diff($this->selectedUsers, [$userId]);
+        if (in_array($requestId, $this->selectedUsers)) {
+            $this->selectedUsers = array_diff($this->selectedUsers, [$requestId]);
         } else {
-            $this->selectedUsers[] = $userId;
+            $this->selectedUsers[] = $requestId;
         }
         
         // Resetear arrays para mantener índices consecutivos
@@ -115,8 +118,8 @@ class ApprovalQueue extends Component
      */
     public function selectAllUsers()
     {
-        $users = $this->getPendingUsersQuery()->get();
-        $this->selectedUsers = $users->pluck('id')->toArray();
+        $approvalRequests = $this->getPendingUsersQuery()->get();
+        $this->selectedUsers = $approvalRequests->pluck('id')->toArray(); // ID de la solicitud, no del usuario
     }
 
     /**
@@ -140,6 +143,9 @@ class ApprovalQueue extends Component
         $this->showBulkApproval = true;
         $this->bulkEmail = '';
         $this->bulkPassword = '';
+        
+        // Emitir evento para gestión de modales
+        $this->dispatch('modal-opened', ['type' => 'bulk-approval']);
     }
 
     /**
@@ -150,6 +156,9 @@ class ApprovalQueue extends Component
         $this->showBulkApproval = false;
         $this->bulkEmail = '';
         $this->bulkPassword = '';
+        
+        // Emitir evento para gestión de modales
+        $this->dispatch('modal-closed', ['type' => 'bulk-approval']);
     }
 
     /**
@@ -183,32 +192,32 @@ class ApprovalQueue extends Component
             ]);
         }
 
-        // Procesar aprobación de usuarios seleccionados
+        // Procesar aprobación de solicitudes seleccionadas
         $approvedUsers = [];
         $errors = [];
         
-        foreach ($this->selectedUsers as $userId) {
+        foreach ($this->selectedUsers as $requestId) {
             try {
-                $user = User::findOrFail($userId);
+                $solicitudAprobacion = UserApprovalRequest::findOrFail($requestId);
                 
                 // Verificar permisos
-                if (!$this->canManageUser($user)) {
-                    $errors[] = "No tienes permisos para aprobar a {$user->nombre} {$user->apellido}.";
+                if (!$this->canManageRequest($solicitudAprobacion)) {
+                    $errors[] = "No tienes permisos para aprobar la solicitud de {$solicitudAprobacion->usuario->nombre} {$solicitudAprobacion->usuario->apellido}.";
                     continue;
                 }
                 
                 // Verificar estado
-                if ($user->estado !== 'Pendiente') {
-                    $errors[] = "{$user->nombre} {$user->apellido} no está en estado pendiente.";
+                if ($solicitudAprobacion->estado !== 'pendiente') {
+                    $errors[] = "La solicitud de {$solicitudAprobacion->usuario->nombre} {$solicitudAprobacion->usuario->apellido} no está pendiente.";
                     continue;
                 }
                 
-                // Aprobar usuario
-                $user->update(['estado' => 'Activo']);
-                $approvedUsers[] = $user->nombre . ' ' . $user->apellido;
+                // Aprobar solicitud
+                $solicitudAprobacion->aprobar($currentUser, 'Aprobación múltiple desde cola de aprobación');
+                $approvedUsers[] = $solicitudAprobacion->usuario->nombre . ' ' . $solicitudAprobacion->usuario->apellido;
                 
             } catch (\Exception $e) {
-                $errors[] = "Error al aprobar usuario ID {$userId}: " . $e->getMessage();
+                $errors[] = "Error al aprobar solicitud ID {$requestId}: " . $e->getMessage();
             }
         }
 
@@ -216,7 +225,7 @@ class ApprovalQueue extends Component
         $message = '';
         if (!empty($approvedUsers)) {
             $count = count($approvedUsers);
-            $message = "Se aprobaron exitosamente {$count} usuario(s): " . implode(', ', $approvedUsers) . '.';
+            $message = "Se aprobaron exitosamente {$count} solicitud(es): " . implode(', ', $approvedUsers) . '.';
         }
         
         if (!empty($errors)) {
@@ -237,19 +246,26 @@ class ApprovalQueue extends Component
     /**
      * Abre el modal de aprobación individual
      */
-    public function openIndividualApproval($userId)
+    public function openIndividualApproval($requestId)
     {
-        $user = User::findOrFail($userId);
+        $solicitudAprobacion = UserApprovalRequest::findOrFail($requestId);
         
-        if (!$this->canManageUser($user)) {
-            session()->flash('error', 'No tienes permisos para aprobar a este usuario.');
+        if (!$this->canManageRequest($solicitudAprobacion)) {
+            session()->flash('error', 'No tienes permisos para aprobar esta solicitud.');
             return;
         }
         
-        $this->userToApprove = $user;
+        // Cerrar el modal de detalles si está abierto para evitar conflictos de z-index
+        $this->closeUserDetails();
+        
+        $this->userToApprove = $solicitudAprobacion->usuario;
+        $this->approvalRequest = $solicitudAprobacion;
         $this->showIndividualApproval = true;
         $this->individualEmail = '';
         $this->individualPassword = '';
+        
+        // Emitir evento para gestión de modales
+        $this->dispatch('modal-opened', ['type' => 'individual-approval']);
     }
 
     /**
@@ -258,9 +274,13 @@ class ApprovalQueue extends Component
     public function closeIndividualApproval()
     {
         $this->showIndividualApproval = false;
+        $this->userToApprove = null;
+        $this->approvalRequest = null;
         $this->individualEmail = '';
         $this->individualPassword = '';
-        $this->userToApprove = null;
+        
+        // Emitir evento para gestión de modales
+        $this->dispatch('modal-closed', ['type' => 'individual-approval']);
     }
 
     /**
@@ -294,24 +314,24 @@ class ApprovalQueue extends Component
             ]);
         }
 
-        // Verificar permisos y estado
-        if (!$this->canManageUser($this->userToApprove)) {
+        // Verificar permisos y estado usando la solicitud
+        if (!$this->canManageRequest($this->approvalRequest)) {
             $this->closeIndividualApproval();
-            session()->flash('error', 'No tienes permisos para aprobar a este usuario.');
+            session()->flash('error', 'No tienes permisos para aprobar esta solicitud.');
             return;
         }
         
-        if ($this->userToApprove->estado !== 'Pendiente') {
+        if ($this->approvalRequest->estado !== 'pendiente') {
             $this->closeIndividualApproval();
-            session()->flash('error', 'Este usuario no está en estado pendiente.');
+            session()->flash('error', 'Esta solicitud no está pendiente.');
             return;
         }
 
-        // Aprobar usuario
-        $this->userToApprove->update(['estado' => 'Activo']);
+        // Aprobar solicitud
+        $this->approvalRequest->aprobar($currentUser, 'Aprobado desde cola de aprobación');
         
         $userName = $this->userToApprove->nombre . ' ' . $this->userToApprove->apellido;
-        $roleName = $this->userToApprove->getRoleNames()->first();
+        $roleName = $this->approvalRequest->rol_solicitado;
         $unidadNombre = $this->userToApprove->unidadOrganizacional->siglas ?? 'Sin unidad';
         
         if ($currentUser->hasRole('Admin General')) {
@@ -332,70 +352,63 @@ class ApprovalQueue extends Component
     /**
      * Aprueba un usuario cambiando su estado a 'Activo' (método legacy - mantener para compatibilidad)
      */
-    public function approve($userId)
+    public function approve($requestId)
     {
-        $this->openIndividualApproval($userId);
+        $solicitudAprobacion = UserApprovalRequest::findOrFail($requestId);
+        
+        if (!$this->canManageRequest($solicitudAprobacion)) {
+            session()->flash('error', 'No tienes permisos para aprobar esta solicitud.');
+            return;
+        }
+        
+        $solicitudAprobacion->aprobar(Auth::user(), 'Aprobado desde la cola de aprobación');
+        
+        session()->flash('success', "Usuario {$solicitudAprobacion->usuario->nombre} {$solicitudAprobacion->usuario->apellido} aprobado exitosamente.");
     }
 
     /**
      * Rechaza y elimina permanentemente a un usuario.
      */
-    public function reject($userId)
+    public function reject($requestId)
     {
-        $user = User::findOrFail($userId);
+        $solicitudAprobacion = UserApprovalRequest::findOrFail($requestId);
         
-        // Verificar si el usuario actual puede rechazar a este usuario
-        if (!$this->canManageUser($user)) {
-            session()->flash('error', 'No tienes permisos para rechazar a este usuario.');
+        if (!$this->canManageRequest($solicitudAprobacion)) {
+            session()->flash('error', 'No tienes permisos para rechazar esta solicitud.');
             return;
         }
         
-        // Verificar que el usuario esté en estado pendiente
-        if ($user->estado !== 'Pendiente') {
-            session()->flash('error', 'Este usuario no está en estado pendiente.');
-            return;
-        }
+        $razon = 'Rechazado desde la cola de aprobación';
+        $solicitudAprobacion->rechazar(Auth::user(), $razon);
         
-        $userName = $user->nombre . ' ' . $user->apellido;
-        $roleName = $user->getRoleNames()->first();
-        $unidadNombre = $user->unidadOrganizacional->siglas ?? 'Sin unidad';
-        
-        // Cerrar el modal si está abierto
-        if ($this->selectedUser && $this->selectedUser->id === $userId) {
-            $this->closeUserDetails();
-        }
-        
-        // Remover de selección múltiple si está seleccionado
-        $this->selectedUsers = array_diff($this->selectedUsers, [$userId]);
-        
-        $user->delete();
-        
-        $currentUser = Auth::user();
-        
-        if ($currentUser->hasRole('Admin General')) {
-            $contextMessage = "Usuario {$roleName} del sistema (Unidad: {$unidadNombre}) rechazado y eliminado.";
-        } else {
-            $contextMessage = "Usuario {$roleName} creado por supervisor de tu unidad organizacional ({$unidadNombre}) rechazado y eliminado.";
-        }
-        
-        session()->flash('success', $contextMessage);
+        session()->flash('success', 'Solicitud rechazada y usuario eliminado exitosamente.');
     }
 
     /**
      * Muestra los detalles de un usuario específico
      */
-    public function viewDetails($userId)
+    public function viewDetails($requestId)
     {
-        $user = User::with(['roles', 'supervisor', 'unidadOrganizacional'])->findOrFail($userId);
+        $solicitudAprobacion = UserApprovalRequest::with([
+            'usuario.roles', 
+            'usuario.supervisor', 
+            'usuario.unidadOrganizacional',
+            'creador',
+            'supervisorAsignado'
+        ])->findOrFail($requestId);
         
-        // Verificar si el usuario actual puede ver los detalles de este usuario
-        if (!$this->canManageUser($user)) {
-            session()->flash('error', 'No tienes permisos para ver los detalles de este usuario.');
+        // Verificar si el usuario actual puede ver los detalles de esta solicitud
+        if (!$this->canManageRequest($solicitudAprobacion)) {
+            session()->flash('error', 'No tienes permisos para ver los detalles de esta solicitud.');
             return;
         }
         
-        $this->selectedUser = $user;
+        $this->selectedUser = $solicitudAprobacion->usuario;
+        $this->approvalRequest = $solicitudAprobacion; // Almacenar también la solicitud
         $this->showUserDetails = true;
+        
+        // Emitir evento para gestión de modales
+        $this->dispatch('modal-opened', ['type' => 'user-details']);
     }
 
     /**
@@ -403,12 +416,16 @@ class ApprovalQueue extends Component
      */
     public function closeUserDetails()
     {
-        $this->selectedUser = null;
         $this->showUserDetails = false;
+        $this->selectedUser = null;
+        $this->approvalRequest = null;
+        
+        // Emitir evento para gestión de modales
+        $this->dispatch('modal-closed', ['type' => 'user-details']);
     }
 
     /**
-     * Obtiene el contexto del usuario actual para mostrar en la interfaz
+     * Obtiene el contexto del usuario currente para mostrar en la interfaz
      */
     public function getCurrentUserContext()
     {
@@ -417,7 +434,7 @@ class ApprovalQueue extends Component
         if ($currentUser->hasRole('Admin General')) {
             return [
                 'tipo' => 'Admin General',
-                'descripcion' => 'Puedes ver y aprobar usuarios Supervisor y Conductor de todas las unidades organizacionales del sistema.',
+                'descripcion' => 'Puedes ver y aprobar CUALQUIER usuario pendiente de TODAS las unidades organizacionales del sistema. Cuando creas usuarios Admin, supervisas directamente a ese Admin.',
                 'color' => 'purple'
             ];
         }
@@ -426,7 +443,7 @@ class ApprovalQueue extends Component
             $unidadNombre = $currentUser->unidadOrganizacional->siglas ?? 'Sin unidad';
             return [
                 'tipo' => 'Admin',
-                'descripcion' => "Puedes ver y aprobar usuarios Conductor creados por Supervisores de tu unidad organizacional ({$unidadNombre}).",
+                'descripcion' => "Solo puedes ver y aprobar usuarios creados por SUPERVISORES de tu unidad organizacional ({$unidadNombre}). Los usuarios que tú crees requieren aprobación del Admin General.",
                 'color' => 'blue'
             ];
         }
@@ -443,27 +460,37 @@ class ApprovalQueue extends Component
      */
     public function getStatistics()
     {
-        $currentUser = Auth::user();
-        $visibleUsers = $this->getPendingUsersQuery()->get();
-        
-        $stats = [
-            'total_visible' => $visibleUsers->count(),
-            'conductores' => $visibleUsers->filter(function($user) {
-                return $user->hasRole('Conductor/Operador');
-            })->count(),
-            'supervisores' => $visibleUsers->filter(function($user) {
-                return $user->hasRole('Supervisor');
-            })->count(),
-            'admins' => $visibleUsers->filter(function($user) {
-                return $user->hasRole('Admin');
-            })->count(),
-            'selected' => count($this->selectedUsers),
-        ];
-        
-        $stats['can_approve'] = $stats['total_visible'];
-        $stats['cannot_approve'] = 0;
-        
-        return $stats;
+        try {
+            $currentUser = Auth::user();
+            $approvalRequests = $this->getPendingUsersQuery()->get();
+            
+            $stats = [
+                'total_visible' => $approvalRequests->count(),
+                'conductores' => $approvalRequests->where('rol_solicitado', 'Conductor/Operador')->count(),
+                'supervisores' => $approvalRequests->where('rol_solicitado', 'Supervisor')->count(),
+                'admins' => $approvalRequests->where('rol_solicitado', 'Admin')->count(),
+                'selected' => count($this->selectedUsers),
+            ];
+            
+            $stats['can_approve'] = $stats['total_visible'];
+            $stats['cannot_approve'] = 0;
+            
+            return $stats;
+        } catch (\Exception $e) {
+            \Log::error('Error en getStatistics: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            
+            // Retornar estadísticas vacías en caso de error
+            return [
+                'total_visible' => 0,
+                'conductores' => 0,
+                'supervisores' => 0,
+                'admins' => 0,
+                'selected' => 0,
+                'can_approve' => 0,
+                'cannot_approve' => 0,
+            ];
+        }
     }
 
     /**
@@ -471,13 +498,31 @@ class ApprovalQueue extends Component
      */
     public function render()
     {
-        $users = $this->getPendingUsersQuery()
-            ->orderBy('created_at', 'desc')
-            ->get();
+        try {
+            // Obtener las solicitudes de aprobación
+            $approvalRequests = $this->getPendingUsersQuery()
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            // Asegurar que siempre sea una colección
+            if (!$approvalRequests) {
+                $approvalRequests = collect();
+            }
+
+        } catch (\Exception $e) {
+            // En caso de error, log y crear colección vacía
+            \Log::error('Error en render ApprovalQueue: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            $approvalRequests = collect();
+        }
 
         $userContext = $this->getCurrentUserContext();
         $statistics = $this->getStatistics();
 
-        return view('livewire.user.approval-queue', compact('users', 'userContext', 'statistics'));
+        return view('livewire.user.approval-queue', [
+            'approvalRequests' => $approvalRequests,
+            'userContext' => $userContext,
+            'statistics' => $statistics
+        ]);
     }
 }
