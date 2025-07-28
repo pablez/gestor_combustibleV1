@@ -40,6 +40,11 @@ $updateProfileInformation = function () {
         // Guardar la nueva foto
         $fotoPath = $this->foto_perfil->store('fotos-perfil', 'public');
         $validated['foto_perfil'] = $fotoPath;
+    } elseif ($eliminarFoto || $this->foto_perfil === null) {
+        if ($user->foto_perfil && Storage::disk('public')->exists($user->foto_perfil)) {
+            Storage::disk('public')->delete($user->foto_perfil);
+        }
+        $validated['foto_perfil'] = null;
     }
 
     $user->fill($validated);
@@ -68,7 +73,21 @@ $sendVerification = function () {
     Session::flash('status', 'verification-link-sent');
 };
 
+$eliminarFotoPerfil = function () {
+    $user = Auth::user();
+    if ($user->foto_perfil && Storage::disk('public')->exists($user->foto_perfil)) {
+        Storage::disk('public')->delete($user->foto_perfil);
+    }
+    $user->foto_perfil = null;
+    $user->save();
+    $this->foto_perfil = null;
+    $this->dispatch('profile-updated', nombre: $user->nombre);
+};
 ?>
+
+@php
+    if (!isset($eliminarFoto)) $eliminarFoto = false;
+@endphp
 
 <section>
     <header>
@@ -99,6 +118,12 @@ $sendVerification = function () {
                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">JPG, PNG o GIF (máximo 2MB)</p>
             </div>
         </div>
+
+        @if(auth()->user()->hasCustomProfilePhoto())
+            <button type="button" wire:click="eliminarFotoPerfil" class="mt-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-3 rounded">
+                Eliminar foto de perfil
+            </button>
+        @endif
 
         {{-- Información personal --}}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">

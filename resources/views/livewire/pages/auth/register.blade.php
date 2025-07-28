@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\Models\CodigoRegistro;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -17,7 +18,8 @@ state([
     'apellido'=> '',
     'email' => '',
     'password' => '',
-    'password_confirmation' => ''
+    'password_confirmation' => '',
+    'codigo_registro' => '',
 ]);
 
 rules([
@@ -25,24 +27,29 @@ rules([
     'apellido' => ['required', 'string', 'max:255'],
     'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
     'password' => ['required', 'string', 'confirmed', Rules\Password::defaults()],
+    'codigo_registro' => ['required', 'string'],
 ]);
 
 $register = function () {
     $validated = $this->validate();
 
-    $validated['password'] = Hash::make($validated['password']);
+    // Validar el código de registro
+    $codigo = CodigoRegistro::where('codigo', $validated['codigo_registro'])
+        ->where('vigente_hasta', '>', now())
+        ->latest('created_at')
+        ->first();
 
-    // 1. Se crea con estado 'Inactivo' y sin rol (el rol no se asigna aquí)
+    if (!$codigo) {
+        $this->addError('codigo_registro', 'El código de registro es inválido o ha expirado.');
+        return;
+    }
+
+    $validated['password'] = Hash::make($validated['password']);
     $validated['estado'] = 'Pendiente';
 
     event(new Registered($user = User::create($validated)));
 
-    // 2. No se inicia sesión automáticamente (línea eliminada)
-
-    // 3. Se añade un mensaje de éxito para informar al usuario
     session()->flash('status', '¡Registro exitoso! Su cuenta está pendiente de activación por un administrador.');
-
-    // 4. Se redirecciona a la página de login
     $this->redirect(route('login', absolute: false), navigate: true);
 };
 
@@ -92,6 +99,15 @@ $register = function () {
                             name="password_confirmation" required autocomplete="new-password" />
 
             <x-input-error :messages="$errors->get('password_confirmation')" class="mt-2" />
+        </div>
+
+        <!-- Código de registro -->
+        <div class="mt-4">
+            <x-input-label for="codigo_registro" :value="__('Código de registro')" />
+            <x-text-input wire:model="codigo_registro" id="codigo_registro" class="block mt-1 w-full"
+                type="text" name="codigo_registro" required autocomplete="off" />
+            <x-input-error :messages="$errors->get('codigo_registro')" class="mt-2" />
+            <small class="text-gray-500">Solicita este código a tu supervisor o administrador.</small>
         </div>
 
         <div class="flex items-center justify-end mt-4">

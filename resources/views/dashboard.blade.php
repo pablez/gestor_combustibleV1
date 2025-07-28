@@ -44,12 +44,16 @@
                                 </a>
                             </div>
                         </div>
+
+                        <livewire:codigo-registro-panel />
                     @endif
 
                     <!-- Información general para todos los usuarios -->
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {{-- ... existing general info cards ... --}}
                     </div>
+        
+                    
                 </div>
             </div>
         </div>

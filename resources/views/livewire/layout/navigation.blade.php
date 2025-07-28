@@ -10,7 +10,19 @@ $logout = function (Logout $logout) {
 
 ?>
 
-<nav x-data="{ open: false }" class="bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 shadow-sm">
+<nav
+    x-data="{ open: false, scrolled: false }"
+    x-init="
+        window.addEventListener('scroll', () => {
+            scrolled = window.scrollY > 10;
+        });
+    "
+    :class="{
+        'sticky top-0 left-0 w-full z-60 transition-all duration-300': true,
+        'shadow-lg bg-white/90 dark:bg-gray-800/90 backdrop-blur border-b border-gray-200 dark:border-gray-700': scrolled,
+        'shadow-sm bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700': !scrolled
+    }"
+>
     <!-- Primary Navigation Menu -->
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between h-16">
