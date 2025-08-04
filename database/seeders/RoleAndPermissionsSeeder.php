@@ -264,6 +264,12 @@ class RoleAndPermissionsSeeder extends Seeder
 
         // ====== CREAR USUARIOS DE EJEMPLO ======
         
+        // Buscar unidades organizacionales para asignar a los usuarios
+        // Admin General pertenece a "Despacho de la Gobernacion" (DG)
+        $unidadDespacho = \App\Models\UnidadOrganizacional::where('siglas', 'DG')->first();
+        // Admin y Supervisor pertenecen a "Secretaría Departamental de Planificacion y Desarrollo Estrategico" (SDPDE)
+        $unidadSDPDE = \App\Models\UnidadOrganizacional::where('siglas', 'SDPDE')->first();
+        
         $adminGeneralUser = User::firstOrCreate(
             ['email' => 'admingeneral@example.com'],
             [
@@ -271,6 +277,9 @@ class RoleAndPermissionsSeeder extends Seeder
                 'apellido' => 'General',
                 'password' => bcrypt('password'),
                 'estado' => 'Activo',
+                'supervisor_id' => null,
+                'unidad_organizacional_id' => $unidadDespacho ? $unidadDespacho->id_unidad_organizacional : null,
+                'foto_perfil' => null,
             ]
         );
         $adminGeneralUser->assignRole('Admin General');
@@ -282,6 +291,9 @@ class RoleAndPermissionsSeeder extends Seeder
                 'apellido' => 'Sistema',
                 'password' => bcrypt('password'),
                 'estado' => 'Activo',
+                'supervisor_id' => $adminGeneralUser->id,
+                'unidad_organizacional_id' => $unidadSDPDE ? $unidadSDPDE->id_unidad_organizacional : null,
+                'foto_perfil' => null,
             ]
         );
         $adminUser->assignRole('Admin');
@@ -293,6 +305,9 @@ class RoleAndPermissionsSeeder extends Seeder
                 'apellido' => 'Jefe',
                 'password' => bcrypt('password'),
                 'estado' => 'Activo',
+                'supervisor_id' => $adminUser->id,
+                'unidad_organizacional_id' => $unidadSDPDE ? $unidadSDPDE->id_unidad_organizacional : null,
+                'foto_perfil' => null,
             ]
         );
         $supervisorUser->assignRole('Supervisor');
@@ -305,6 +320,8 @@ class RoleAndPermissionsSeeder extends Seeder
                 'password' => bcrypt('password'),
                 'estado' => 'Activo',
                 'supervisor_id' => $supervisorUser->id,
+                'unidad_organizacional_id' => $unidadSDPDE ? $unidadSDPDE->id_unidad_organizacional : null,
+                'foto_perfil' => null,
             ]
         );
         $conductorUser->assignRole('Conductor/Operador');

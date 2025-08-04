@@ -6,6 +6,7 @@ use Illuminate\Auth\Events\Registered;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules;
+use App\Models\UserApprovalRequest;
 
 use function Livewire\Volt\layout;
 use function Livewire\Volt\rules;
@@ -33,21 +34,51 @@ rules([
 $register = function () {
     $validated = $this->validate();
 
-    // Validar el código de registro
+    // Validar el código de registro (vigente y no usado)
     $codigo = CodigoRegistro::where('codigo', $validated['codigo_registro'])
         ->where('vigente_hasta', '>', now())
+        ->where('usado', false)
         ->latest('created_at')
         ->first();
 
     if (!$codigo) {
-        $this->addError('codigo_registro', 'El código de registro es inválido o ha expirado.');
+        $this->addError('codigo_registro', 'El código de registro es inválido, ha expirado o ya fue utilizado.');
         return;
     }
 
-    $validated['password'] = Hash::make($validated['password']);
-    $validated['estado'] = 'Pendiente';
 
-    event(new Registered($user = User::create($validated)));
+    // Asignar datos del código a los campos del usuario
+    $validated['unidad_organizacional_id'] = $codigo->unidad_organizacional_id;
+    $validated['supervisor_id'] = $codigo->supervisor_id;
+    $validated['estado'] = 'Pendiente';
+    $validated['password'] = Hash::make($validated['password']);
+
+    // Crear el usuario
+    $user = User::create($validated);
+
+    // Asignar el rol solicitado
+    if ($codigo->rol_solicitado) {
+        $user->assignRole($codigo->rol_solicitado);
+    }
+
+    event(new Registered($user));
+
+    // Marcar el código como usado
+    $codigo->usado = true;
+    $codigo->save();
+
+    // Crear la solicitud de aprobación
+    UserApprovalRequest::create([
+        'usuario_id' => $user->id,
+        'creado_por' => $codigo->creado_por,
+        'supervisor_asignado_id' => $codigo->supervisor_id,
+        'tipo_solicitud' => 'nuevo_usuario',
+        'estado' => 'pendiente',
+        'rol_solicitado' => $codigo->rol_solicitado,
+        'unidad_organizacional_id' => $codigo->unidad_organizacional_id,
+        'rol_creador' => 'registro',
+        'datos_usuario' => $user->toArray(),
+    ]);
 
     session()->flash('status', '¡Registro exitoso! Su cuenta está pendiente de activación por un administrador.');
     $this->redirect(route('login', absolute: false), navigate: true);

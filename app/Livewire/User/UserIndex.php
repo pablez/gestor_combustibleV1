@@ -128,6 +128,12 @@ class UserIndex extends Component
         return $this->getManagableUsersQuery()->where('estado', 'Inactivo')->count();
     }
 
+    // Resetear la página al cambiar cualquier filtro
+    public function updatedRoleFilter() { $this->resetPage(); }
+    public function updatedUnidadFilter() { $this->resetPage(); }
+    public function updatedStatusFilter() { $this->resetPage(); }
+    public function updatedSearch() { $this->resetPage(); }
+
     /**
      * Obtiene las unidades organizacionales que el usuario puede filtrar
      */
@@ -156,6 +162,7 @@ class UserIndex extends Component
         $currentUser = Auth::user();
         
         if ($currentUser->hasRole('Admin General')) {
+            // Solo mostrar filtros para Admin, Supervisor y Conductor/Operador
             return ['Admin', 'Supervisor', 'Conductor/Operador'];
         }
 
@@ -192,7 +199,15 @@ class UserIndex extends Component
             if ($this->roleFilter === 'sin-rol') {
                 $query->whereDoesntHave('roles');
             } else {
-                $query->whereHas('roles', fn($q) => $q->where('name', $this->roleFilter));
+                if ($this->roleFilter === 'Admin') {
+                    $query->whereHas('roles', function($q) {
+                        $q->whereIn('name', ['Admin', 'Admin General']);
+                    });
+                } else {
+                    $query->whereHas('roles', function($q) {
+                        $q->where('name', $this->roleFilter);
+                    });
+                }
             }
         }
 
@@ -203,7 +218,8 @@ class UserIndex extends Component
 
         // Aplicar filtro de unidad organizacional
         if ($this->unidadFilter) {
-            $query->where('unidad_organizacional_id', $this->unidadFilter);
+            $unidadId = (int) $this->unidadFilter;
+            $query->where('unidad_organizacional_id', $unidadId);
         }
 
         // Excluir al usuario actual de la lista

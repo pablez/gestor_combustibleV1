@@ -90,6 +90,20 @@
                                     @endforeach
                                     <option value="sin-rol">Sin Rol</option>
                                 </select>
+                                <script>
+                                    // Forzar el valor del filtro a coincidir exactamente con el nombre del rol
+                                    document.addEventListener('livewire:navigated', function() {
+                                        const select = document.querySelector('select[wire\\:model\\.live="roleFilter"]');
+                                        if (select && select.value) {
+                                            for (let option of select.options) {
+                                                if (option.value.toLowerCase() === select.value.toLowerCase()) {
+                                                    select.value = option.value;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    });
+                                </script>
                             @endif
 
                             {{-- Filtro de Estado --}}
@@ -142,6 +156,35 @@
                         </div>
                     </div>
 
+                    {{-- Contador de resultados filtrados y botón de impresión --}}
+                    <div class="mb-2 flex flex-col md:flex-row md:items-center md:justify-between gap-2 text-sm text-gray-600 dark:text-gray-300">
+                        <div>
+                            Resultados: <span class="font-bold">{{ $users->total() }}</span>
+                            @if($roleFilter)
+                                | Rol: <span class="font-semibold">{{ $roleFilter }}</span>
+                            @endif
+                            @if($unidadFilter)
+                                | Unidad: <span class="font-semibold">
+                                    {{ optional($unidadesOrganizacionales->where('id_unidad_organizacional', $unidadFilter)->first())->siglas ?? 'N/A' }}
+                                </span>
+                            @endif
+                        </div>
+                        <a href="#" onclick="
+                            const params = new URLSearchParams({
+                                search: '{{ $search }}',
+                                roleFilter: '{{ $roleFilter }}',
+                                statusFilter: '{{ $statusFilter }}',
+                                unidadFilter: '{{ $unidadFilter }}'
+                            });
+                            window.open('/usuarios/imprimir?' + params.toString(), '_blank');
+                            return false;"
+                            class="inline-flex items-center px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md font-semibold text-xs text-gray-700 dark:text-gray-200 uppercase tracking-widest shadow-sm hover:bg-gray-100 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition ease-in-out duration-150 print:hidden">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2m-6 0v4m0 0h4m-4 0H8" />
+                            </svg>
+                            Imprimir lista
+                        </a>
+                    </div>
                     {{-- Tabla de usuarios --}}
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">

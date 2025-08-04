@@ -45,6 +45,7 @@ Route::middleware(['auth','role:Admin General|Admin|Supervisor'])->group(functio
     Route::get('/usuarios/crear', \App\Livewire\User\UserCreate::class)->name('admin.users.create');
     Route::get('/usuarios/{user}/editar', \App\Livewire\User\UserEdit::class)->name('admin.users.edit');
     Route::get('/usuarios/{user}/ver', \App\Livewire\User\UserShow::class)->name('admin.users.show');
+    Route::get('/usuarios/imprimir', \App\Livewire\User\UserPrint::class)->name('admin.users.print');
 });
 
 // Rutas para ver unidades - Accesible para Admin, Supervisor y Conductor/Operador
